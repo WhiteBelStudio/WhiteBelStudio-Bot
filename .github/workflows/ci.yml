@@ -27,4 +27,4 @@ jobs:
       - name: Smoke import
         env:
           BOT_TOKEN: "000000000:ci-test-token"
-        run: python -c "import main; import start; print('imports: OK')"
+        run: python -c "import main; print('imports: OK')"
