@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pterodactyl bootstrap: sync GitHub, then run the current application."""
+"""Pterodactyl bootstrap: sync GitHub, migrate, then run the current application."""
 
 from __future__ import annotations
 
@@ -9,7 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parent
+load_dotenv(ROOT / ".env")
 REPO = os.getenv("GITHUB_REPOSITORY", "WhiteBelStudio/WhiteBelStudio-Bot")
 BRANCH = os.getenv("GITHUB_BRANCH", "main")
 APP_DIR = ROOT / ".runtime" / "app"
@@ -40,6 +43,17 @@ def install_dependencies() -> None:
         run(sys.executable, "-m", "pip", "install", "-r", str(requirements))
 
 
+def run_migrations() -> None:
+    if not os.getenv("DATABASE_URL", "").strip():
+        print("[deploy] DATABASE_URL not configured; migrations skipped", flush=True)
+        return
+    if not (APP_DIR / "alembic.ini").exists():
+        print("[deploy] alembic.ini not present; migrations skipped", flush=True)
+        return
+    print("[deploy] Running database migrations", flush=True)
+    run(sys.executable, "-m", "alembic", "upgrade", "head", cwd=APP_DIR)
+
+
 def start_application() -> None:
     app_main = APP_DIR / "main.py"
     if not app_main.exists():
@@ -51,6 +65,7 @@ def start_application() -> None:
 def main() -> None:
     sync_repo()
     install_dependencies()
+    run_migrations()
     start_application()
 
 
