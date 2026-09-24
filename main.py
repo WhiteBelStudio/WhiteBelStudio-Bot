@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import os
 
+from dotenv import load_dotenv
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -15,6 +17,8 @@ from aiogram.types import Message
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
 from app.db.repositories import get_or_create_user
+
+load_dotenv()
 
 
 dp = Dispatcher()
