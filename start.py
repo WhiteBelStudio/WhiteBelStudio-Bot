@@ -13,6 +13,7 @@ REPO = os.getenv("GITHUB_REPOSITORY", "WhiteBelStudio/WhiteBelStudio-Bot")
 BRANCH = os.getenv("GITHUB_BRANCH", "main")
 UPDATE_ENABLED = os.getenv("GITHUB_UPDATE_ENABLED", "true").lower() in {"1", "true", "yes"}
 REQUIREMENTS = ROOT / "requirements.txt"
+RUNTIME_DIRS = ("data", "logs", "backups", ".runtime")
 
 
 def log(message: str) -> None:
@@ -29,25 +30,33 @@ def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def check_environment() -> None:
-    missing = [name for name in ("BOT_TOKEN",) if not os.getenv(name)]
+    required = ("BOT_TOKEN",)
+    missing = [name for name in required if not os.getenv(name)]
     if missing:
         raise RuntimeError("Missing required environment variables: " + ", ".join(missing))
 
 
 def ensure_runtime_dirs() -> None:
-    for name in ("data", "logs", "backups", ".runtime"):
+    for name in RUNTIME_DIRS:
         (ROOT / name).mkdir(exist_ok=True)
 
 
-def update_from_github() -> str | None:
-    """Update a git checkout while preserving ignored runtime data and .env."""
-    if not UPDATE_ENABLED:
-        log("GitHub updater disabled")
-        return None
-
+def ensure_git_checkout() -> None:
     if not (ROOT / ".git").exists():
-        log("No .git directory; updater skipped. Use a Git checkout for automatic updates.")
-        return None
+        raise RuntimeError(
+            "Pterodactyl project is not a Git checkout. Clone "
+            f"https://github.com/{REPO}.git into the server project directory first."
+        )
+
+
+def update_from_github() -> tuple[str, str]:
+    """Update a Git checkout while preserving ignored runtime data and .env."""
+    ensure_git_checkout()
+
+    if not UPDATE_ENABLED:
+        current = git("rev-parse", "HEAD").stdout.strip()
+        log("GitHub updater disabled")
+        return current, current
 
     log(f"Checking GitHub: {REPO}@{BRANCH}")
     git("remote", "set-url", "origin", f"https://github.com/{REPO}.git")
@@ -58,18 +67,20 @@ def update_from_github() -> str | None:
 
     if current == remote:
         log(f"Already up to date: {current[:12]}")
-        return current
+        return current, remote
 
     log(f"Updating {current[:12]} -> {remote[:12]}")
     git("reset", "--hard", f"origin/{BRANCH}")
     updated = git("rev-parse", "HEAD").stdout.strip()
     log(f"Updated to {updated[:12]}")
-    return updated
+    return current, updated
 
 
 def install_dependencies() -> None:
-    if REQUIREMENTS.exists():
-        run([sys.executable, "-m", "pip", "install", "-r", str(REQUIREMENTS)])
+    if not REQUIREMENTS.exists():
+        raise RuntimeError("requirements.txt is missing")
+
+    run([sys.executable, "-m", "pip", "install", "-r", str(REQUIREMENTS)])
 
 
 def run_migrations() -> None:
@@ -101,6 +112,22 @@ def health_check() -> None:
     log("Health check: OK")
 
 
+def rollback_code(previous_commit: str) -> None:
+    if not previous_commit or not (ROOT / ".git").exists():
+        return
+
+    log(f"Rolling back code to {previous_commit[:12]}")
+    git("reset", "--hard", previous_commit, check=False)
+
+    # Restore the dependency set belonging to the previous code revision.
+    previous_requirements = ROOT / "requirements.txt"
+    if previous_requirements.exists():
+        run(
+            [sys.executable, "-m", "pip", "install", "-r", str(previous_requirements)],
+            check=False,
+        )
+
+
 def start_bot() -> None:
     run([sys.executable, str(ROOT / "main.py")])
 
@@ -109,22 +136,25 @@ def main() -> None:
     log("WhiteBelStudio Bot production bootstrap")
     log(f"Python: {sys.version.split()[0]}")
     log(f"Root: {ROOT}")
+    log(f"Repository: {REPO}@{BRANCH}")
 
     ensure_runtime_dirs()
     check_environment()
 
-    previous_commit = None
+    previous_commit = ""
+    updated_commit = ""
+
     try:
-        previous_commit = git("rev-parse", "HEAD", check=False).stdout.strip() or None
-        update_from_github()
+        previous_commit, updated_commit = update_from_github()
         install_dependencies()
+        health_check()
         run_migrations()
         health_check()
+        log(f"Bootstrap ready at {updated_commit[:12]}")
     except Exception as exc:
         log(f"Bootstrap failed: {exc}")
-        if previous_commit and (ROOT / ".git").exists():
-            log(f"Rolling back code to {previous_commit[:12]}")
-            git("reset", "--hard", previous_commit, check=False)
+        if previous_commit and updated_commit and previous_commit != updated_commit:
+            rollback_code(previous_commit)
         raise
 
     start_bot()
