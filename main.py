@@ -128,9 +128,9 @@ async def chat_stats_handler(message: Message) -> None:
             return
 
         await message.answer(
-            f"📊 <b>Статистика чата</b>\\n\\n"
-            f"💬 {chat.title}\\n"
-            f"👥 Участников в статистике: <b>{members}</b>\\n"
+            f"📊 <b>Статистика чата</b>\n\n"
+            f"💬 {chat.title}\n"
+            f"👥 Участников в статистике: <b>{members}</b>\n"
             f"📝 Сообщений: <b>{messages}</b>"
         )
     except Exception as exc:
@@ -158,8 +158,8 @@ async def my_stats_handler(message: Message) -> None:
             return
 
         await message.answer(
-            f"📈 <b>Твоя активность</b>\\n\\n"
-            f"💬 Сообщений: <b>{stats.message_count}</b>\\n"
+            f"📈 <b>Твоя активность</b>\n\n"
+            f"💬 Сообщений: <b>{stats.message_count}</b>\n"
             f"🤖 Команд: <b>{stats.command_count}</b>"
         )
     except Exception as exc:
