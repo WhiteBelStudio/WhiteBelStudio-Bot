@@ -1,0 +1,1 @@
+"""WhiteBelStudio Bot application package."""
