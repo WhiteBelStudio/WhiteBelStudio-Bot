@@ -21,6 +21,7 @@ env/
 data/
 logs/
 backups/
+.runtime/
 *.db
 *.sqlite
 *.sqlite3
