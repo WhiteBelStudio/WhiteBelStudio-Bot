@@ -11,9 +11,15 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand, BotCommandScopeDefault, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message
+from aiogram.types import (
+    BotCommand,
+    BotCommandScopeDefault,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
@@ -52,19 +58,30 @@ async def start_handler(message: Message) -> None:
     suffix = "\n\n🗄 База данных: подключена" if database_ok else ""
     account_status = "🆕 Аккаунт создан" if created else "♻️ Аккаунт обновлён"
 
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
+                InlineKeyboardButton(text="⭐ Репутация", callback_data="menu_reputation"),
+            ],
+            [
+                InlineKeyboardButton(text="📜 Правила", callback_data="menu_rules"),
+                InlineKeyboardButton(text="❓ Помощь", callback_data="menu_help"),
+            ],
+        ]
+    )
+
     await message.answer(
         "👋 Привет!\n\n"
         "Добро пожаловать в WhiteBelStudio.\n"
         f"{account_status}\n\n"
         "👤 /profile — профиль\n"
-        "🔎 /find — найти людей\n"
-        "👥 /friends — друзья\n"
-        "📨 /requests — заявки\n"
-        "💬 /msg @username текст — сообщение\n"
-        "📖 /chat @username — история\n"
-        "⭐ /rate @username 5 комментарий — оценка\n"
-        "🏆 /reputation @username — репутация"
-        + suffix
+        "⭐ /rep — твоя репутация\n"
+        "🏆 /toprep — топ участников\n"
+        "📜 /rules — правила\n"
+        "❓ /help — помощь"
+        + suffix,
+        reply_markup=keyboard,
     )
 
 
@@ -413,6 +430,8 @@ async def main() -> None:
         print("[db] DATABASE_URL: not configured", flush=True)
 
     try:
+        await setup_bot_commands(bot)
+        print("[bot] Command menu: configured", flush=True)
         print("[bot] Starting polling...", flush=True)
         await dp.start_polling(bot)
     finally:
