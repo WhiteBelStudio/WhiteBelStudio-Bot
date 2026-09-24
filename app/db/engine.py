@@ -34,6 +34,10 @@ def get_database_url() -> str:
                 key = "ssl"
                 if value in {"require", "verify-ca", "verify-full"}:
                     value = "require"
+            elif key == "channel_binding":
+                # asyncpg does not accept libpq's channel_binding URL parameter.
+                continue
+
             normalized_query.append((key, value))
 
         url = urlunsplit(
