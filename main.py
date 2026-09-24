@@ -11,12 +11,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
-from app.db.repositories import get_or_create_user
+from app.services.users import format_user_profile, sync_telegram_user
 
 load_dotenv()
 
@@ -27,29 +27,52 @@ dp = Dispatcher()
 @dp.message(CommandStart())
 async def start_handler(message: Message) -> None:
     database_ok = False
+    created = False
 
-    if os.getenv("DATABASE_URL", "").strip():
+    if message.from_user is not None and os.getenv("DATABASE_URL", "").strip():
         try:
             async for session in get_session():
-                await get_or_create_user(
-                    session,
-                    telegram_id=message.from_user.id,
-                    first_name=message.from_user.first_name,
-                    username=message.from_user.username,
-                    last_name=message.from_user.last_name,
-                )
+                _, created = await sync_telegram_user(session, message.from_user)
             database_ok = True
         except Exception as exc:
             print(f"[db] user sync failed: {exc}", flush=True)
 
     suffix = "\n\n🗄 База данных: подключена" if database_ok else ""
+    account_status = (
+        "🆕 Аккаунт создан"
+        if created
+        else "♻️ Аккаунт обновлён"
+    )
 
     await message.answer(
         "👋 Привет!\n\n"
         "Добро пожаловать в WhiteBelStudio.\n"
-        "Бот успешно работает! 🚀"
+        f"{account_status}\n\n"
+        "Используй /profile, чтобы открыть свой профиль."
         + suffix
     )
+
+
+@dp.message(Command("profile"))
+async def profile_handler(message: Message) -> None:
+    if message.from_user is None:
+        return
+
+    if not os.getenv("DATABASE_URL", "").strip():
+        await message.answer("🗄 База данных пока не настроена.")
+        return
+
+    try:
+        async for session in get_session():
+            user, _ = await sync_telegram_user(session, message.from_user)
+            text = format_user_profile(user)
+
+        await message.answer(text)
+    except Exception as exc:
+        print(f"[db] profile load failed: {exc}", flush=True)
+        await message.answer(
+            "⚠️ Не удалось загрузить профиль. Попробуй ещё раз."
+        )
 
 
 async def main() -> None:
