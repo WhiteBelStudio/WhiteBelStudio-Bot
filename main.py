@@ -17,6 +17,7 @@ from aiogram.types import Message
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
 from app.services.communication import format_message, get_messages, send_message
+from app.services.reputation import format_reputation, get_reputation, rate_user
 from app.services.social import (
     find_users,
     format_social_user,
@@ -60,7 +61,9 @@ async def start_handler(message: Message) -> None:
         "👥 /friends — друзья\n"
         "📨 /requests — заявки\n"
         "💬 /msg @username текст — сообщение\n"
-        "📖 /chat @username — история"
+        "📖 /chat @username — история\n"
+        "⭐ /rate @username 5 комментарий — оценка\n"
+        "🏆 /reputation @username — репутация"
         + suffix
     )
 
@@ -216,6 +219,80 @@ async def _respond_to_request(message: Message, accept: bool) -> None:
     except Exception as exc:
         print(f"[social] request response failed: {exc}", flush=True)
         await message.answer("⚠️ Не удалось обработать заявку.")
+
+
+@dp.message(Command("rate"))
+async def rate_handler(message: Message) -> None:
+    if message.from_user is None:
+        return
+
+    parts = (message.text or "").split(maxsplit=3)
+    if len(parts) < 3:
+        await message.answer("Использование: <code>/rate @username 5 комментарий</code>")
+        return
+
+    username = parts[1]
+    try:
+        score = int(parts[2])
+    except ValueError:
+        await message.answer("❌ Оценка должна быть числом от 1 до 5.")
+        return
+
+    comment = parts[3].strip() if len(parts) >= 4 else None
+
+    try:
+        async for session in get_session():
+            rater, _ = await sync_telegram_user(session, message.from_user)
+            target = await get_user_by_username(session, username)
+            if target is None:
+                result = "not_found"
+            else:
+                result = await rate_user(session, rater.id, target.id, score, comment)
+
+        responses = {
+            "not_found": "❌ Пользователь не найден.",
+            "self": "🙂 Нельзя оценить самого себя.",
+            "invalid_score": "❌ Оценка должна быть от 1 до 5.",
+            "not_friends": "🔒 Оценивать можно только друзей.",
+            "unavailable": "❌ Пользователь недоступен.",
+            "comment_too_long": "❌ Комментарий слишком длинный (максимум 500 символов).",
+            "created": "⭐ Оценка сохранена.",
+            "updated": "⭐ Оценка обновлена.",
+        }
+        await message.answer(responses.get(result, "⚠️ Не удалось сохранить оценку."))
+
+    except Exception as exc:
+        print(f"[reputation] rate failed: {exc}", flush=True)
+        await message.answer("⚠️ Не удалось сохранить оценку.")
+
+
+@dp.message(Command("reputation"))
+async def reputation_handler(message: Message) -> None:
+    if message.from_user is None:
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Использование: <code>/reputation @username</code>")
+        return
+
+    username = parts[1].strip().split()[0]
+
+    try:
+        async for session in get_session():
+            target = await get_user_by_username(session, username)
+
+            if target is None:
+                await message.answer("❌ Пользователь не найден.")
+                return
+
+            data = await get_reputation(session, target.id)
+
+        name = " ".join(p for p in (target.first_name, target.last_name) if p)
+        await message.answer(format_reputation(data, name))
+    except Exception as exc:
+        print(f"[reputation] load failed: {exc}", flush=True)
+        await message.answer("⚠️ Не удалось загрузить репутацию.")
 
 
 @dp.message(Command("msg"))
