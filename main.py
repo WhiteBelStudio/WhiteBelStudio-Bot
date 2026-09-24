@@ -11,7 +11,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand, BotCommandScopeDefault, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import BotCommand, BotCommandScopeDefault, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
@@ -66,6 +66,26 @@ async def start_handler(message: Message) -> None:
         "🏆 /reputation @username — репутация"
         + suffix
     )
+
+
+@dp.callback_query()
+async def menu_callback_handler(callback: CallbackQuery) -> None:
+    if callback.message is None:
+        await callback.answer()
+        return
+
+    action = callback.data or ""
+
+    if action == "menu_profile":
+        await profile_handler(callback.message)
+    elif action == "menu_reputation":
+        await rep_handler(callback.message)
+    elif action == "menu_rules":
+        await rules_handler(callback.message)
+    elif action == "menu_help":
+        await help_handler(callback.message)
+
+    await callback.answer()
 
 
 @dp.message(Command("help"))
