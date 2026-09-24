@@ -27,6 +27,7 @@ dp = Dispatcher()
 @dp.message(CommandStart())
 async def start_handler(message: Message) -> None:
     database_ok = False
+
     if os.getenv("DATABASE_URL", "").strip():
         try:
             async for session in get_session():
@@ -41,15 +42,11 @@ async def start_handler(message: Message) -> None:
         except Exception as exc:
             print(f"[db] user sync failed: {exc}", flush=True)
 
-    suffix = "
+    suffix = "\n\n🗄 База данных: подключена" if database_ok else ""
 
-🗄 База данных: подключена" if database_ok else ""
     await message.answer(
-        "👋 Привет!
-
-"
-        "Добро пожаловать в WhiteBelStudio.
-"
+        "👋 Привет!\n\n"
+        "Добро пожаловать в WhiteBelStudio.\n"
         "Бот успешно работает! 🚀"
         + suffix
     )
@@ -62,6 +59,7 @@ async def main() -> None:
 
     proxy = os.getenv("TELEGRAM_PROXY", "").strip() or None
     session = AiohttpSession(proxy=proxy)
+
     bot = Bot(
         token=token,
         session=session,
@@ -71,7 +69,10 @@ async def main() -> None:
     print("========================================", flush=True)
     print(" WhiteBelStudio Bot", flush=True)
     print("========================================", flush=True)
-    print(f"[bot] Telegram proxy: {'enabled' if proxy else 'disabled'}", flush=True)
+    print(
+        f"[bot] Telegram proxy: {'enabled' if proxy else 'disabled'}",
+        flush=True,
+    )
 
     if os.getenv("DATABASE_URL", "").strip():
         try:
