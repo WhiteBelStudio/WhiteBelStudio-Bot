@@ -2,7 +2,7 @@
 
 Production Telegram bot platform by WhiteBelStudio.
 
-## Stack
+## Architecture\n\nThe application architecture and module boundaries are documented in `docs/ARCHITECTURE.md`. The project follows a layered design: Telegram/API -> application services -> repositories -> PostgreSQL. The Mini App communicates only through the API.\n\n## Stack
 
 - Python 3.12+
 - aiogram 3.x
