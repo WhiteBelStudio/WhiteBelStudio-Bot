@@ -20,15 +20,8 @@ def log(message: str) -> None:
 
 
 def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    safe = " ".join("<token>" if "@" in part and "://" in part else part for part in command)
-    log("$ " + safe)
-    return subprocess.run(
-        command,
-        cwd=ROOT,
-        check=check,
-        text=True,
-        capture_output=False,
-    )
+    log("$ " + " ".join(command))
+    return subprocess.run(command, cwd=ROOT, check=check, text=True)
 
 
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -42,7 +35,7 @@ def check_environment() -> None:
 
 
 def ensure_runtime_dirs() -> None:
-    for name in ("data", "logs", "backups"):
+    for name in ("data", "logs", "backups", ".runtime"):
         (ROOT / name).mkdir(exist_ok=True)
 
 
@@ -53,7 +46,7 @@ def update_from_github() -> str | None:
         return None
 
     if not (ROOT / ".git").exists():
-        log("No .git directory; assuming Pterodactyl already contains the release")
+        log("No .git directory; updater skipped. Use a Git checkout for automatic updates.")
         return None
 
     log(f"Checking GitHub: {REPO}@{BRANCH}")
@@ -68,11 +61,7 @@ def update_from_github() -> str | None:
         return current
 
     log(f"Updating {current[:12]} -> {remote[:12]}")
-
-    # Do not run git clean/reset with flags that remove untracked runtime data.
-    # .env, data/, logs/ and backups/ are ignored by the repository.
     git("reset", "--hard", f"origin/{BRANCH}")
-
     updated = git("rev-parse", "HEAD").stdout.strip()
     log(f"Updated to {updated[:12]}")
     return updated
@@ -84,11 +73,15 @@ def install_dependencies() -> None:
 
 
 def run_migrations() -> None:
-    if (ROOT / "alembic.ini").exists() and (ROOT / "migrations").exists():
-        log("Running database migrations")
-        result = run([sys.executable, "-m", "alembic", "upgrade", "head"], check=False)
-        if result.returncode != 0:
-            raise RuntimeError("Database migration failed")
+    migration_env = ROOT / "migrations" / "env.py"
+    if not migration_env.exists():
+        log("Alembic environment is not configured yet; migrations skipped")
+        return
+
+    log("Running database migrations")
+    result = run([sys.executable, "-m", "alembic", "upgrade", "head"], check=False)
+    if result.returncode != 0:
+        raise RuntimeError("Database migration failed")
 
 
 def health_check() -> None:
@@ -96,10 +89,12 @@ def health_check() -> None:
     if not main_file.exists():
         raise RuntimeError("main.py is missing after update")
 
-    result = run(
-        [sys.executable, "-m", "compileall", "-q", str(ROOT / "app"), str(main_file)],
-        check=False,
-    )
+    targets = [str(main_file)]
+    app_dir = ROOT / "app"
+    if app_dir.exists():
+        targets.append(str(app_dir))
+
+    result = run([sys.executable, "-m", "compileall", "-q", *targets], check=False)
     if result.returncode != 0:
         raise RuntimeError("Python compile check failed")
 
@@ -107,8 +102,7 @@ def health_check() -> None:
 
 
 def start_bot() -> None:
-    main_file = ROOT / "main.py"
-    run([sys.executable, str(main_file)])
+    run([sys.executable, str(ROOT / "main.py")])
 
 
 def main() -> None:
