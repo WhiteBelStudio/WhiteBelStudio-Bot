@@ -58,7 +58,9 @@ async def start_handler(message: Message) -> None:
         "👤 /profile — профиль\n"
         "🔎 /find — найти людей\n"
         "👥 /friends — друзья\n"
-        "📨 /requests — заявки\n"\n        "💬 /msg @username текст — сообщение\n"\n        "📖 /chat @username — история"
+        "📨 /requests — заявки\n"
+        "💬 /msg @username текст — сообщение\n"
+        "📖 /chat @username — история"
         + suffix
     )
 
