@@ -11,13 +11,13 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
+from aiogram.types import BotCommand, BotCommandScopeDefault, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
-from app.services.communication import format_message, get_messages, send_message
-from app.services.reputation import format_reputation, get_reputation, rate_user
+from app.services.community import format_community_reputation, get_reputation_history, get_reputation_score
 from app.services.social import (
     find_users,
     format_social_user,
@@ -66,6 +66,85 @@ async def start_handler(message: Message) -> None:
         "🏆 /reputation @username — репутация"
         + suffix
     )
+
+
+@dp.message(Command("help"))
+async def help_handler(message: Message) -> None:
+    await message.answer(
+        "❓ <b>WhiteBelStudio</b>\n\n"
+        "🤖 Я бот-модератор и помощник сообщества.\n\n"
+        "👤 /profile — профиль\n"
+        "⭐ /rep — твоя репутация\n"
+        "🏆 /toprep — участники с высокой репутацией\n"
+        "📜 /rules — правила\n"
+        "🔎 /find — поиск участников\n"
+        "👥 /friends — друзья\n\n"
+        "Модерационные команды доступны администраторам."
+    )
+
+
+@dp.message(Command("rules"))
+async def rules_handler(message: Message) -> None:
+    await message.answer(
+        "📜 <b>Правила сообщества</b>\n\n"
+        "1. Уважай других участников.\n"
+        "2. Не спамь и не флуди.\n"
+        "3. Не публикуй запрещённый или опасный контент.\n"
+        "4. Не выдавай себя за другого участника.\n"
+        "5. Выполняй требования модераторов.\n\n"
+        "Нарушения могут влиять на репутацию и приводить к ограничениям."
+    )
+
+
+@dp.message(Command("rep"))
+async def rep_handler(message: Message) -> None:
+    if message.from_user is None:
+        return
+    try:
+        async for session in get_session():
+            user, _ = await sync_telegram_user(session, message.from_user)
+            score = await get_reputation_score(session, user.id)
+            history = await get_reputation_history(session, user.id)
+        name = " ".join(p for p in (user.first_name, user.last_name) if p)
+        await message.answer(format_community_reputation(name, score, history))
+    except Exception as exc:
+        print(f"[reputation] load failed: {exc}", flush=True)
+        await message.answer("⚠️ Не удалось загрузить репутацию.")
+
+
+@dp.message(Command("toprep"))
+async def top_rep_handler(message: Message) -> None:
+    try:
+        async for session in get_session():
+            from sqlalchemy import func, select
+            from app.db.models import User
+            from app.services.community import ReputationEvent
+
+            result = await session.execute(
+                select(
+                    User,
+                    func.coalesce(func.sum(ReputationEvent.delta), 0).label("score"),
+                )
+                .join(ReputationEvent, ReputationEvent.user_id == User.id)
+                .where(User.is_active.is_(True), User.is_bot.is_(False))
+                .group_by(User.id)
+                .order_by(func.sum(ReputationEvent.delta).desc(), User.first_name.asc())
+                .limit(10)
+            )
+            rows = list(result.all())
+
+        if not rows:
+            await message.answer("🏆 Пока нет участников с изменениями репутации.")
+            return
+
+        lines = ["🏆 <b>Топ репутации</b>", ""]
+        for index, (user, score) in enumerate(rows, 1):
+            name = " ".join(p for p in (user.first_name, user.last_name) if p)
+            lines.append(f"{index}. {name} — <b>{int(score)}</b>")
+        await message.answer("\n".join(lines))
+    except Exception as exc:
+        print(f"[reputation] top failed: {exc}", flush=True)
+        await message.answer("⚠️ Не удалось загрузить топ.")
 
 
 @dp.message(Command("profile"))
@@ -221,166 +300,6 @@ async def _respond_to_request(message: Message, accept: bool) -> None:
         await message.answer("⚠️ Не удалось обработать заявку.")
 
 
-@dp.message(Command("rate"))
-async def rate_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    parts = (message.text or "").split(maxsplit=3)
-    if len(parts) < 3:
-        await message.answer("Использование: <code>/rate @username 5 комментарий</code>")
-        return
-
-    username = parts[1]
-    try:
-        score = int(parts[2])
-    except ValueError:
-        await message.answer("❌ Оценка должна быть числом от 1 до 5.")
-        return
-
-    comment = parts[3].strip() if len(parts) >= 4 else None
-
-    try:
-        async for session in get_session():
-            rater, _ = await sync_telegram_user(session, message.from_user)
-            target = await get_user_by_username(session, username)
-            if target is None:
-                result = "not_found"
-            else:
-                result = await rate_user(session, rater.id, target.id, score, comment)
-
-        responses = {
-            "not_found": "❌ Пользователь не найден.",
-            "self": "🙂 Нельзя оценить самого себя.",
-            "invalid_score": "❌ Оценка должна быть от 1 до 5.",
-            "not_friends": "🔒 Оценивать можно только друзей.",
-            "unavailable": "❌ Пользователь недоступен.",
-            "comment_too_long": "❌ Комментарий слишком длинный (максимум 500 символов).",
-            "created": "⭐ Оценка сохранена.",
-            "updated": "⭐ Оценка обновлена.",
-        }
-        await message.answer(responses.get(result, "⚠️ Не удалось сохранить оценку."))
-
-    except Exception as exc:
-        print(f"[reputation] rate failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось сохранить оценку.")
-
-
-@dp.message(Command("reputation"))
-async def reputation_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) < 2:
-        await message.answer("Использование: <code>/reputation @username</code>")
-        return
-
-    username = parts[1].strip().split()[0]
-
-    try:
-        async for session in get_session():
-            target = await get_user_by_username(session, username)
-
-            if target is None:
-                await message.answer("❌ Пользователь не найден.")
-                return
-
-            data = await get_reputation(session, target.id)
-
-        name = " ".join(p for p in (target.first_name, target.last_name) if p)
-        await message.answer(format_reputation(data, name))
-    except Exception as exc:
-        print(f"[reputation] load failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось загрузить репутацию.")
-
-
-@dp.message(Command("msg"))
-async def message_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    parts = (message.text or "").split(maxsplit=2)
-    if len(parts) < 3:
-        await message.answer("Использование: <code>/msg @username текст</code>")
-        return
-
-    username, body = parts[1], parts[2]
-
-    try:
-        async for session in get_session():
-            sender, _ = await sync_telegram_user(session, message.from_user)
-            target = await get_user_by_username(session, username)
-
-            if target is None:
-                result, record = "not_found", None
-            else:
-                result, record = await send_message(session, sender.id, target.id, body)
-
-        responses = {
-            "not_found": "❌ Пользователь не найден.",
-            "self": "🙂 Нельзя написать самому себе.",
-            "empty": "❌ Сообщение пустое.",
-            "too_long": "❌ Сообщение слишком длинное (максимум 4000 символов).",
-            "unavailable": "❌ Пользователь недоступен.",
-            "not_friends": "🔒 Сначала добавь пользователя в друзья.",
-        }
-
-        if result != "sent":
-            await message.answer(responses.get(result, "⚠️ Не удалось отправить сообщение."))
-            return
-
-        assert target is not None and record is not None
-        await message.bot.send_message(
-            target.telegram_id,
-            "💬 <b>Новое сообщение</b>\n\n"
-            f"{body}\n\n"
-            f"Ответить: <code>/msg @{message.from_user.username or 'username'} текст</code>",
-        )
-        await message.answer("✅ Сообщение отправлено.")
-
-    except Exception as exc:
-        print(f"[communication] send failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось отправить сообщение.")
-
-
-@dp.message(Command("chat"))
-async def chat_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) < 2:
-        await message.answer("Использование: <code>/chat @username</code>")
-        return
-
-    try:
-        async for session in get_session():
-            current, _ = await sync_telegram_user(session, message.from_user)
-            target = await get_user_by_username(session, parts[1].strip().split()[0])
-            if target is None:
-                messages = []
-            else:
-                messages = await get_messages(session, current.id, target.id)
-
-        if target is None:
-            await message.answer("❌ Пользователь не найден.")
-            return
-
-        if not messages:
-            await message.answer("💬 История сообщений пока пустая.")
-            return
-
-        lines = ["💬 <b>Последние сообщения</b>", ""]
-        for item in messages:
-            lines.append(format_message(item, current.id))
-        await message.answer("\n".join(lines))
-
-    except Exception as exc:
-        print(f"[communication] history failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось загрузить историю.")
-
-
 @dp.message(Command("friends"))
 async def friends_handler(message: Message) -> None:
     if message.from_user is None:
@@ -427,6 +346,22 @@ async def remove_friend_handler(message: Message) -> None:
     except Exception as exc:
         print(f"[social] remove friend failed: {exc}", flush=True)
         await message.answer("⚠️ Не удалось удалить друга.")
+
+
+async def setup_bot_commands(bot: Bot) -> None:
+    await bot.set_my_commands(
+        [
+            BotCommand(command="start", description="Открыть меню"),
+            BotCommand(command="help", description="Помощь"),
+            BotCommand(command="profile", description="Мой профиль"),
+            BotCommand(command="rep", description="Моя репутация"),
+            BotCommand(command="toprep", description="Топ репутации"),
+            BotCommand(command="rules", description="Правила сообщества"),
+            BotCommand(command="find", description="Найти участника"),
+            BotCommand(command="friends", description="Друзья"),
+        ],
+        scope=BotCommandScopeDefault(),
+    )
 
 
 async def main() -> None:
