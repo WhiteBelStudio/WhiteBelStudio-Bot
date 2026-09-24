@@ -24,7 +24,7 @@ from aiogram.types import (
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
 from app.services.chat import get_chat_stats, get_member_stats, record_chat_activity
-from app.services.community import format_community_reputation, get_reputation_history, get_reputation_score
+from app.services.community import format_community_reputation, get_reputation_history, get_reputation_score, get_reputation_top
 from app.services.social import (
     find_users,
     format_social_user,
@@ -177,8 +177,10 @@ async def help_handler(message: Message) -> None:
         "🏆 /toprep — участники с высокой репутацией\n"
         "📜 /rules — правила\n"
         "🔎 /find — поиск участников\n"
-        "👥 /friends — друзья\n\n"
-        "📊 /chatstats — статистика чата\\n"        "📈 /mystats — моя активность\\n\\n"        "Модерационные команды доступны администраторам."
+        "👥 /friends — друзья\n"
+        "📊 /chatstats — статистика чата\n"
+        "📈 /mystats — моя активность\n\n"
+        "Модерационные команды доступны администраторам."
     )
 
 
