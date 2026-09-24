@@ -23,8 +23,9 @@ from aiogram.types import (
 
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
-from app.services.chat import get_chat_stats, get_member_stats, record_chat_activity
-from app.services.community import format_community_reputation, get_reputation_history, get_reputation_score, get_reputation_top
+from app.bot.middleware import ChatActivityMiddleware
+from app.services.chat import get_chat_stats, get_member_stats
+from app.services.community import (\n    format_community_reputation,\n    get_reputation_history,\n    get_reputation_score,\n    get_reputation_top,\n)
 from app.services.social import (
     find_users,
     format_social_user,
@@ -41,6 +42,7 @@ load_dotenv()
 
 
 dp = Dispatcher()
+dp.message.middleware(ChatActivityMiddleware())
 
 
 @dp.message(CommandStart())
@@ -217,31 +219,15 @@ async def rep_handler(message: Message) -> None:
 async def top_rep_handler(message: Message) -> None:
     try:
         async for session in get_session():
-            from sqlalchemy import func, select
-            from app.db.models import User
-            from app.services.community import ReputationEvent
-
-            result = await session.execute(
-                select(
-                    User,
-                    func.coalesce(func.sum(ReputationEvent.delta), 0).label("score"),
-                )
-                .join(ReputationEvent, ReputationEvent.user_id == User.id)
-                .where(User.is_active.is_(True), User.is_bot.is_(False))
-                .group_by(User.id)
-                .order_by(func.sum(ReputationEvent.delta).desc(), User.first_name.asc())
-                .limit(10)
-            )
-            rows = list(result.all())
+            rows = await get_reputation_top(session, 10)
 
         if not rows:
             await message.answer("🏆 Пока нет участников с изменениями репутации.")
             return
 
         lines = ["🏆 <b>Топ репутации</b>", ""]
-        for index, (user, score) in enumerate(rows, 1):
-            name = " ".join(p for p in (user.first_name, user.last_name) if p)
-            lines.append(f"{index}. {name} — <b>{int(score)}</b>")
+        for index, (_, name, score) in enumerate(rows, 1):
+            lines.append(f"{index}. {name} — <b>{score}</b>")
         await message.answer("\n".join(lines))
     except Exception as exc:
         print(f"[reputation] top failed: {exc}", flush=True)
@@ -449,28 +435,6 @@ async def remove_friend_handler(message: Message) -> None:
         await message.answer("⚠️ Не удалось удалить друга.")
 
 
-@dp.message()
-async def community_activity_handler(message: Message) -> None:
-    if message.chat.type not in {"group", "supergroup"}:
-        return
-    if message.from_user is None or message.from_user.is_bot:
-        return
-    if not os.getenv("DATABASE_URL", "").strip():
-        return
-
-    try:
-        async for session in get_session():
-            user, _ = await sync_telegram_user(session, message.from_user)
-            await record_chat_activity(
-                session,
-                message.chat.id,
-                message.chat.title or "Без названия",
-                message.chat.type,
-                user,
-                is_command=bool((message.text or "").lstrip().startswith("/")),
-            )
-    except Exception as exc:
-        print(f"[chat] activity record failed: {exc}", flush=True)
 
 
 async def setup_bot_commands(bot: Bot) -> None:
