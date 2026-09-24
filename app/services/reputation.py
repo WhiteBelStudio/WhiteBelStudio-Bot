@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from html import escape
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,8 +100,9 @@ def format_reputation(data: dict[str, object], name: str) -> str:
     average = float(data["average"])
     reviews = data["reviews"]
 
+    safe_name = escape(name)
     lines = [
-        f"⭐ <b>Репутация {name}</b>",
+        f"⭐ <b>Репутация {safe_name}</b>",
         f"Оценок: <b>{count}</b>",
         f"Средняя оценка: <b>{average:.1f}/5</b>",
     ]
@@ -108,8 +111,8 @@ def format_reputation(data: dict[str, object], name: str) -> str:
         lines.append("")
         lines.append("Последние оценки:")
         for rating, user in reviews:
-            username = f"@{user.username}" if user.username else "без username"
-            comment = f" — {rating.comment}" if rating.comment else ""
+            username = f"@{escape(user.username)}" if user.username else "без username"
+            comment = f" — {escape(rating.comment)}" if rating.comment else ""
             lines.append(f"⭐ {rating.score}/5 — {username}{comment}")
 
     return "
