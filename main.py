@@ -16,6 +16,7 @@ from aiogram.types import Message
 
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
+from app.services.communication import format_message, get_messages, send_message
 from app.services.social import (
     find_users,
     format_social_user,
@@ -57,7 +58,7 @@ async def start_handler(message: Message) -> None:
         "👤 /profile — профиль\n"
         "🔎 /find — найти людей\n"
         "👥 /friends — друзья\n"
-        "📨 /requests — заявки"
+        "📨 /requests — заявки\n"\n        "💬 /msg @username текст — сообщение\n"\n        "📖 /chat @username — история"
         + suffix
     )
 
@@ -213,6 +214,92 @@ async def _respond_to_request(message: Message, accept: bool) -> None:
     except Exception as exc:
         print(f"[social] request response failed: {exc}", flush=True)
         await message.answer("⚠️ Не удалось обработать заявку.")
+
+
+@dp.message(Command("msg"))
+async def message_handler(message: Message) -> None:
+    if message.from_user is None:
+        return
+
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 3:
+        await message.answer("Использование: <code>/msg @username текст</code>")
+        return
+
+    username, body = parts[1], parts[2]
+
+    try:
+        async for session in get_session():
+            sender, _ = await sync_telegram_user(session, message.from_user)
+            target = await get_user_by_username(session, username)
+
+            if target is None:
+                result, record = "not_found", None
+            else:
+                result, record = await send_message(session, sender.id, target.id, body)
+
+        responses = {
+            "not_found": "❌ Пользователь не найден.",
+            "self": "🙂 Нельзя написать самому себе.",
+            "empty": "❌ Сообщение пустое.",
+            "too_long": "❌ Сообщение слишком длинное (максимум 4000 символов).",
+            "unavailable": "❌ Пользователь недоступен.",
+            "not_friends": "🔒 Сначала добавь пользователя в друзья.",
+        }
+
+        if result != "sent":
+            await message.answer(responses.get(result, "⚠️ Не удалось отправить сообщение."))
+            return
+
+        assert target is not None and record is not None
+        await message.bot.send_message(
+            target.telegram_id,
+            "💬 <b>Новое сообщение</b>\n\n"
+            f"{body}\n\n"
+            f"Ответить: <code>/msg @{message.from_user.username or 'username'} текст</code>",
+        )
+        await message.answer("✅ Сообщение отправлено.")
+
+    except Exception as exc:
+        print(f"[communication] send failed: {exc}", flush=True)
+        await message.answer("⚠️ Не удалось отправить сообщение.")
+
+
+@dp.message(Command("chat"))
+async def chat_handler(message: Message) -> None:
+    if message.from_user is None:
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Использование: <code>/chat @username</code>")
+        return
+
+    try:
+        async for session in get_session():
+            current, _ = await sync_telegram_user(session, message.from_user)
+            target = await get_user_by_username(session, parts[1].strip().split()[0])
+            if target is None:
+                messages = []
+            else:
+                messages = await get_messages(session, current.id, target.id)
+
+        if target is None:
+            await message.answer("❌ Пользователь не найден.")
+            return
+
+        if not messages:
+            await message.answer("💬 История сообщений пока пустая.")
+            return
+
+        lines = ["💬 <b>Последние сообщения</b>", ""]
+        for item in messages:
+            lines.append(format_message(item, current.id))
+        await message.answer("\n".join(lines))
+
+    except Exception as exc:
+        print(f"[communication] history failed: {exc}", flush=True)
+        await message.answer("⚠️ Не удалось загрузить историю.")
 
 
 @dp.message(Command("friends"))
