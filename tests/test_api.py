@@ -37,7 +37,7 @@ async def test_api_health_reports_version() -> None:
 @pytest.mark.asyncio
 async def test_readiness_requires_database() -> None:
     with patch(
-        "app.api.app.check_database_connection",
+        "app.api.app.check_readiness",
         new=AsyncMock(side_effect=RuntimeError("database unavailable")),
     ):
         async with AsyncClient(
