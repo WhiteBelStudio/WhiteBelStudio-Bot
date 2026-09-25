@@ -269,6 +269,18 @@ def mini_games_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="🔀 Анаграмма PRO", callback_data="mini_start:anagram"),
             ],
+            [
+                InlineKeyboardButton(text="🧱 Башня", callback_data="mini_start:tower"),
+                InlineKeyboardButton(text="🧪 Алгоритм", callback_data="mini_start:algorithm"),
+            ],
+            [
+                InlineKeyboardButton(text="🧮 Счётчик", callback_data="mini_start:counter"),
+                InlineKeyboardButton(text="🌌 Космический маршрут", callback_data="mini_start:space"),
+            ],
+            [
+                InlineKeyboardButton(text="🏆 Викторина", callback_data="mini_start:quiz"),
+                InlineKeyboardButton(text="🔤 Словесная цепочка", callback_data="mini_start:chain"),
+            ],
         ]
     )
 
@@ -360,7 +372,7 @@ async def mini_game_answer_handler(message: Message) -> None:
         return
 
     if status == "win":
-        xp = {"math": 40, "code": 65, "word": 50, "memory": 75, "sequence": 70, "logic": 80, "anagram": 85}.get(finished_game.kind, 40)
+        xp = {"math": 40, "code": 65, "word": 50, "memory": 75, "sequence": 70, "logic": 80, "anagram": 85, "tower": 90, "algorithm": 100, "counter": 80, "space": 95, "quiz": 60, "chain": 55}.get(finished_game.kind, 40)
         try:
             async for session in get_session():
                 await record_game_result(session, message.from_user.id, result="win", experience=xp)
