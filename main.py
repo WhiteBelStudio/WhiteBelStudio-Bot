@@ -33,16 +33,6 @@ from app.services.community import (
     get_reputation_score,
     get_reputation_top,
 )
-from app.services.social import (
-    find_users,
-    format_social_user,
-    get_user_by_username,
-    list_friends,
-    list_incoming_requests,
-    remove_friend,
-    respond_to_request,
-    send_friend_request,
-)
 from app.services.users import format_user_profile, sync_telegram_user
 
 load_dotenv()
@@ -140,16 +130,6 @@ HELP_CATEGORIES = {
         "🏆 /toprep — топ участников по репутации\n"
         "📜 /rules — правила сообщества"
     ),
-    "social": (
-        "👥 <b>Социальные команды</b>\n\n"
-        "🔎 /find [запрос] — найти участника\n"
-        "👥 /friends — список друзей\n"
-        "📨 /requests — входящие заявки в друзья\n"
-        "➕ /addfriend @username — отправить заявку\n"
-        "✅ /accept @username — принять заявку\n"
-        "❌ /decline @username — отклонить заявку\n"
-        "🗑 /removefriend @username — удалить из друзей"
-    ),
     "game": (
         "🎮 <b>Игровые команды</b>\n\n"
         "🎮 /game — игровой профиль\n"
@@ -176,7 +156,6 @@ def help_categories_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="👤 Основные", callback_data="help_category:general"),
-                InlineKeyboardButton(text="👥 Социальные", callback_data="help_category:social"),
             ],
             [
                 InlineKeyboardButton(text="🎮 Игровые", callback_data="help_category:game"),
@@ -284,190 +263,6 @@ async def profile_handler(message: Message) -> None:
     except Exception as exc:
         print(f"[db] profile load failed: {exc}", flush=True)
         await message.answer("⚠️ Не удалось загрузить профиль. Попробуй ещё раз.")
-
-
-@dp.message(Command("find"))
-async def find_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    query = (message.text or "").split(maxsplit=1)
-    search = query[1].strip() if len(query) > 1 else None
-
-    try:
-        async for session in get_session():
-            current, _ = await sync_telegram_user(session, message.from_user)
-            users = await find_users(session, current.id, search)
-
-        if not users:
-            await message.answer("🔎 Никого не нашёл. Попробуй другой запрос.")
-            return
-
-        lines = ["🔎 <b>Люди</b>", ""]
-        for user in users:
-            lines.append(format_social_user(user))
-        lines.append("")
-        lines.append("Чтобы отправить заявку: <code>/addfriend @username</code>")
-        await message.answer("\n".join(lines))
-    except Exception as exc:
-        print(f"[social] find failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось выполнить поиск.")
-
-
-@dp.message(Command("addfriend"))
-async def add_friend_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip():
-        await message.answer("Использование: <code>/addfriend @username</code>")
-        return
-
-    username = parts[1].strip().split()[0]
-
-    try:
-        async for session in get_session():
-            sender, _ = await sync_telegram_user(session, message.from_user)
-            target = await get_user_by_username(session, username)
-
-            if target is None:
-                result = "not_found"
-            else:
-                result = await send_friend_request(session, sender.id, target.id)
-
-        responses = {
-            "not_found": "❌ Пользователь не найден.",
-            "self": "🙂 Нельзя добавить самого себя.",
-            "unavailable": "❌ Пользователь недоступен.",
-            "friends": "👥 Вы уже друзья.",
-            "outgoing": "📨 Заявка уже отправлена.",
-            "incoming": "📨 Этот пользователь уже отправил тебе заявку. Используй /requests.",
-            "created": "✅ Заявка в друзья отправлена.",
-        }
-        await message.answer(responses.get(result, "⚠️ Не удалось отправить заявку."))
-    except Exception as exc:
-        print(f"[social] add friend failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось отправить заявку.")
-
-
-@dp.message(Command("requests"))
-async def requests_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    try:
-        async for session in get_session():
-            current, _ = await sync_telegram_user(session, message.from_user)
-            requests = await list_incoming_requests(session, current.id)
-
-        if not requests:
-            await message.answer("📨 Новых заявок в друзья нет.")
-            return
-
-        lines = ["📨 <b>Заявки в друзья</b>", ""]
-        for _, user in requests:
-            name = " ".join(p for p in (user.first_name, user.last_name) if p)
-            username = f"@{user.username}" if user.username else "без username"
-            lines.append(f"👤 <b>{name}</b> — {username}")
-        lines.extend([
-            "",
-            "Принять: <code>/accept @username</code>",
-            "Отклонить: <code>/decline @username</code>",
-        ])
-        await message.answer("\n".join(lines))
-    except Exception as exc:
-        print(f"[social] requests failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось загрузить заявки.")
-
-
-@dp.message(Command("accept"))
-async def accept_handler(message: Message) -> None:
-    await _respond_to_request(message, True)
-
-
-@dp.message(Command("decline"))
-async def decline_handler(message: Message) -> None:
-    await _respond_to_request(message, False)
-
-
-async def _respond_to_request(message: Message, accept: bool) -> None:
-    if message.from_user is None:
-        return
-
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) < 2:
-        await message.answer("Укажи username: <code>/accept @username</code>")
-        return
-
-    try:
-        async for session in get_session():
-            current, _ = await sync_telegram_user(session, message.from_user)
-            sender = await get_user_by_username(session, parts[1].strip().split()[0])
-            if sender is None:
-                result = "missing"
-            else:
-                result = await respond_to_request(session, current.id, sender.id, accept)
-
-        if result == "missing":
-            await message.answer("❌ Такая заявка не найдена.")
-        elif accept:
-            await message.answer("🤝 Заявка принята. Теперь вы друзья!")
-        else:
-            await message.answer("❌ Заявка отклонена.")
-    except Exception as exc:
-        print(f"[social] request response failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось обработать заявку.")
-
-
-@dp.message(Command("friends"))
-async def friends_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    try:
-        async for session in get_session():
-            current, _ = await sync_telegram_user(session, message.from_user)
-            friends = await list_friends(session, current.id)
-
-        if not friends:
-            await message.answer("👥 Друзей пока нет. Используй /find.")
-            return
-
-        lines = ["👥 <b>Твои друзья</b>", ""]
-        for user in friends:
-            lines.append(format_social_user(user))
-        lines.extend(["", "Удалить: <code>/removefriend @username</code>"])
-        await message.answer("\n".join(lines))
-    except Exception as exc:
-        print(f"[social] friends failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось загрузить список друзей.")
-
-
-@dp.message(Command("removefriend"))
-async def remove_friend_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) < 2:
-        await message.answer("Использование: <code>/removefriend @username</code>")
-        return
-
-    try:
-        async for session in get_session():
-            current, _ = await sync_telegram_user(session, message.from_user)
-            target = await get_user_by_username(session, parts[1].strip().split()[0])
-            removed = False if target is None else await remove_friend(session, current.id, target.id)
-
-        await message.answer(
-            "✅ Пользователь удалён из друзей." if removed else "❌ Такого друга нет."
-        )
-    except Exception as exc:
-        print(f"[social] remove friend failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось удалить друга.")
-
-
 
 
 async def setup_bot_commands(bot: Bot) -> None:
