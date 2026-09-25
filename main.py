@@ -33,6 +33,7 @@ from app.services.community import (
 )
 from app.services.games import get_game_leaderboard, get_game_profile, record_game_result
 from app.services.minigames import cancel_game, check_answer, game_catalog_text, get_game, start_game
+from app.services.pvp import PVP_KINDS, accept_challenge, create_challenge, decline_challenge, get_active_match, get_display_name, submit_answer
 from app.services.social import (
     find_users,
     format_social_user,
@@ -123,6 +124,14 @@ async def menu_callback_handler(callback: CallbackQuery) -> None:
         await show_help_category(callback.message, action.split(":", 1)[1])
     elif action == "mini_games":
         await show_mini_games(callback.message, edit=True)
+    elif action == "mini_games:regular":
+        await callback.message.edit_text("🎮 <b>Обычные мини-игры</b>\\n\\nВыбери игру:", reply_markup=regular_games_keyboard())
+    elif action == "mini_games:pvp":
+        await show_pvp_category(callback.message, edit=True)
+    elif action.startswith("pvp_create:"):
+        await send_pvp_challenge(callback.message, action.split(":", 1)[1])
+    elif action.startswith("pvp_accept:") or action.startswith("pvp_decline:"):
+        await pvp_callback(callback.message, action)
     elif action.startswith("mini_start:"):
         await start_mini_game(callback.message, action.split(":", 1)[1])
 
@@ -269,32 +278,45 @@ def mini_games_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🧮 Штурм", callback_data="mini_start:math"),
-                InlineKeyboardButton(text="🔐 Взломщик", callback_data="mini_start:code"),
-            ],
-            [
-                InlineKeyboardButton(text="🔤 Шифровальщик", callback_data="mini_start:word"),
-            ],
-            [
-                InlineKeyboardButton(text="🔢 Последовательность", callback_data="mini_start:sequence"),
-                InlineKeyboardButton(text="🧩 Логика", callback_data="mini_start:logic"),
-            ],
-            [
-                InlineKeyboardButton(text="🔀 Анаграмма PRO", callback_data="mini_start:anagram"),
-            ],
-            [
-                InlineKeyboardButton(text="🧱 Башня", callback_data="mini_start:tower"),
-                InlineKeyboardButton(text="🧪 Алгоритм", callback_data="mini_start:algorithm"),
-            ],
-            [
-                InlineKeyboardButton(text="🧮 Счётчик", callback_data="mini_start:counter"),
-                InlineKeyboardButton(text="🌌 Космический маршрут", callback_data="mini_start:space"),
-            ],
-            [
-                InlineKeyboardButton(text="🏆 Викторина", callback_data="mini_start:quiz"),
-                InlineKeyboardButton(text="🔤 Словесная цепочка", callback_data="mini_start:chain"),
+                InlineKeyboardButton(text="🎮 Обычные игры", callback_data="mini_games:regular"),
+                InlineKeyboardButton(text="⚔️ Соревнования", callback_data="mini_games:pvp"),
             ],
         ]
+    )
+
+
+def regular_games_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🧮 Штурм", callback_data="mini_start:math"), InlineKeyboardButton(text="🔐 Взломщик", callback_data="mini_start:code")],
+            [InlineKeyboardButton(text="🔤 Шифровальщик", callback_data="mini_start:word")],
+            [InlineKeyboardButton(text="🔢 Последовательность", callback_data="mini_start:sequence"), InlineKeyboardButton(text="🧩 Логика", callback_data="mini_start:logic")],
+            [InlineKeyboardButton(text="🔀 Анаграмма PRO", callback_data="mini_start:anagram")],
+            [InlineKeyboardButton(text="🧱 Башня", callback_data="mini_start:tower"), InlineKeyboardButton(text="🧪 Алгоритм", callback_data="mini_start:algorithm")],
+            [InlineKeyboardButton(text="🧮 Счётчик", callback_data="mini_start:counter"), InlineKeyboardButton(text="🌌 Космический маршрут", callback_data="mini_start:space")],
+            [InlineKeyboardButton(text="🏆 Викторина", callback_data="mini_start:quiz"), InlineKeyboardButton(text="🔤 Словесная цепочка", callback_data="mini_start:chain")],
+            [InlineKeyboardButton(text="⬅️ К категориям", callback_data="mini_games")],
+        ]
+    )
+
+
+def pvp_games_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🧮 Математика", callback_data="pvp_create:math")],
+            [InlineKeyboardButton(text="🔢 Последовательность", callback_data="pvp_create:sequence")],
+            [InlineKeyboardButton(text="🏆 Викторина", callback_data="pvp_create:quiz")],
+            [InlineKeyboardButton(text="⬅️ К категориям", callback_data="mini_games")],
+        ]
+    )
+
+
+def pvp_challenge_keyboard(match_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="⚔️ Принять вызов", callback_data=f"pvp_accept:{match_id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"pvp_decline:{match_id}"),
+        ]]
     )
 
 
@@ -313,6 +335,81 @@ async def show_mini_games(message: Message, *, edit: bool = False) -> None:
         await message.edit_text(text, reply_markup=keyboard)
     else:
         await message.answer(text, reply_markup=keyboard)
+
+
+async def show_pvp_category(message: Message, *, edit: bool = False) -> None:
+    text = (
+        "⚔️ <b>Соревнования</b>\\n\\n"
+        "Выбери игру для вызова. Оба участника решают одну и ту же задачу.\\n"
+        "⏱ Вызов действует 5 минут.\\n"
+        "🏆 Победа определяется по правильному ответу.\\n"
+        "🪙 Ставок монет нет — только навык и XP."
+    )
+    keyboard = pvp_games_keyboard()
+    if edit:
+        await message.edit_text(text, reply_markup=keyboard)
+    else:
+        await message.answer(text, reply_markup=keyboard)
+
+
+async def send_pvp_challenge(message: Message, kind: str) -> None:
+    if message.from_user is None:
+        return
+    try:
+        async for session in get_session():
+            user, _ = await sync_telegram_user(session, message.from_user)
+            match = await create_challenge(session, user.id, kind)
+            creator_name = f"@{user.username}" if user.username else user.first_name
+    except ValueError as exc:
+        msg = "⚠️ У тебя уже есть активное соревнование." if str(exc) == "active_match" else "⚠️ Не удалось создать вызов."
+        await message.answer(msg)
+        return
+    await message.answer(
+        f"⚔️ <b>Вызов на соревнование!</b>\\n\\n"
+        f"👤 От: <b>{creator_name}</b>\\n"
+        f"🎮 Игра: <b>{PVP_KINDS[kind]}</b>\\n\\n"
+        f"Задача: {match.prompt}\\n\\n"
+        "Нажми «Принять вызов», чтобы начать."
+        ,
+        reply_markup=pvp_challenge_keyboard(match.id),
+    )
+
+
+async def pvp_callback(message: Message, action: str) -> None:
+    if message.from_user is None:
+        return
+    try:
+        match_id = int(action.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await message.answer("⚠️ Некорректный вызов.")
+        return
+    try:
+        async for session in get_session():
+            user, _ = await sync_telegram_user(session, message.from_user)
+            if action.startswith("pvp_accept:"):
+                match = await accept_challenge(session, match_id, user.id)
+                await message.answer(
+                    f"⚔️ <b>Соревнование началось!</b>\\n\\n"
+                    f"🎮 {PVP_KINDS[match.kind]}\\n"
+                    f"{match.prompt}\\n\\n"
+                    "Отправь ответ обычным сообщением."
+                )
+                return
+            await decline_challenge(session, match_id, user.id)
+            await message.answer("❌ Вызов отклонён.")
+    except ValueError as exc:
+        errors = {
+            "self": "⚠️ Нельзя вызвать самого себя.",
+            "active_match": "⚠️ У тебя уже есть активное соревнование.",
+            "creator": "⚠️ Создатель вызова не может отклонить его.",
+            "unavailable": "⚠️ Этот вызов уже недоступен.",
+        }
+        await message.answer(errors.get(str(exc), "⚠️ Действие недоступно."))
+
+
+@dp.message(Command("pvp"))
+async def pvp_handler(message: Message) -> None:
+    await show_pvp_category(message)
 
 
 async def start_mini_game(message: Message, kind: str) -> None:
@@ -355,6 +452,34 @@ async def mini_game_answer_handler(message: Message) -> None:
         return
     if (message.text or "").startswith("/"):
         return
+    try:
+        async for session in get_session():
+            user, _ = await sync_telegram_user(session, message.from_user)
+            pvp_match = await get_active_match(session, user.id)
+            if pvp_match and pvp_match.status == "active":
+                status, match = await submit_answer(session, pvp_match.id, user.id, message.text or "")
+                if status == "correct":
+                    await message.answer("✅ Ответ принят. Ждём соперника.")
+                elif status == "wrong":
+                    await message.answer("❌ Ответ неверный. Ждём соперника.")
+                elif status == "already":
+                    await message.answer("ℹ️ Ты уже ответил в этом соревновании.")
+                elif status == "finished":
+                    if match.status == "draw":
+                        await message.answer("🤝 <b>Ничья!</b> Оба игрока ответили одинаково.")
+                    else:
+                        winner = await get_display_name(session, match.winner_id)
+                        if match.winner_id == user.id:
+                            await message.answer("🏆 <b>Ты победил!</b>\\n✨ +50 XP")
+                            await record_game_result(session, user.id, result="win", experience=50)
+                        else:
+                            await message.answer(f"🏁 <b>Соревнование завершено.</b>\\nПобедитель: {winner}")
+                elif status == "expired":
+                    await message.answer("⏱ Соревнование истекло.")
+                return
+    except Exception as exc:
+        print(f"[pvp] answer failed: {exc}", flush=True)
+
     game = get_game(message.from_user.id)
     if game is None:
         return
