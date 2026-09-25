@@ -15,7 +15,7 @@ from app.services.community import (
     get_reputation_vote_stats,
     set_chat_reputation_vote,
 )
-from app.services.social import get_user_by_username
+from app.services.users import get_user_by_username
 from app.services.users import sync_telegram_user
 
 
