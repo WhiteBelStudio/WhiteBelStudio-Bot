@@ -61,11 +61,22 @@ def configure_engine() -> AsyncEngine:
     global engine, _session_factory
 
     if engine is None:
-        engine = create_async_engine(
-            get_database_url(),
-            pool_pre_ping=True,
-            pool_recycle=1800,
-        )
+        app_env = os.getenv("APP_ENV", "production").lower()
+        database_url = get_database_url()
+        if app_env == "production" and not database_url.startswith("postgresql+asyncpg://"):
+            raise RuntimeError("Production DATABASE_URL must use PostgreSQL")
+
+        engine_kwargs: dict[str, object] = {
+            "pool_pre_ping": True,
+            "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "1800")),
+            "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "30")),
+        }
+        if database_url.startswith("postgresql+asyncpg://"):
+            engine_kwargs["pool_size"] = int(os.getenv("DB_POOL_SIZE", "5"))
+            engine_kwargs["max_overflow"] = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+            engine_kwargs["connect_args"] = {"timeout": float(os.getenv("DB_CONNECT_TIMEOUT", "10"))}
+
+        engine = create_async_engine(database_url, **engine_kwargs)
         _session_factory = async_sessionmaker(
             engine,
             expire_on_commit=False,
