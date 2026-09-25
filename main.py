@@ -464,7 +464,16 @@ async def mini_game_answer_handler(message: Message) -> None:
                     await message.answer("ℹ️ Ты уже ответил в этом соревновании.")
                 elif status == "finished":
                     if match.status == "draw":
-                        await message.answer("🤝 <b>Ничья!</b> Оба игрока ответили одинаково.")
+                        await record_game_result(session, user.id, result="draw", experience=20)
+                        coins = await award_game_coins(session, user.id, game_kind="pvp", result="draw")
+                        other_id = match.opponent_id if match.creator_id == user.id else match.creator_id
+                        if other_id is not None:
+                            await record_game_result(session, other_id, result="draw", experience=20)
+                            await award_game_coins(session, other_id, game_kind="pvp", result="draw")
+                        await message.answer(
+                            f"🤝 <b>Ничья!</b> Оба игрока ответили одинаково.\\n"
+                            f"✨ +20 XP\\n🪙 +{coins:.1f} монет"
+                        )
                     else:
                         winner = await get_display_name(session, match.winner_id)
                         if match.winner_id == user.id:
