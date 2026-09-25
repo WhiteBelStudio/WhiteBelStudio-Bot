@@ -363,10 +363,20 @@ async def mini_game_answer_handler(message: Message) -> None:
     if status == "invalid":
         await message.answer("❌ Некорректный формат ответа. Попробуй ещё раз.")
         return
+    if status == "tower_progress":
+        await message.answer(
+            f"✅ Этаж {data['floor'] - 1} пройден!\n\n"
+            f"{data['prompt']}\n\n"
+            "🎯 Попыток на этаж: <b>2</b>",
+            reply_markup=mini_back_keyboard(),
+        )
+        return
+
     if status in {"progress", "wrong"}:
         if status == "progress" and game.kind == "code":
             await message.answer(
-                f"🔎 Совпадений на правильных местах: <b>{data['exact']}</b>\n"
+                f"🔎 Точных совпадений: <b>{data['exact']}</b>\n"
+                f"🟡 Частичных совпадений: <b>{data['partial']}</b>\n"
                 f"🎯 Осталось попыток: <b>{data['attempts_left']}</b>"
             )
         else:
@@ -381,8 +391,9 @@ async def mini_game_answer_handler(message: Message) -> None:
         except Exception as exc:
             print(f"[minigame] win save failed: {exc}", flush=True)
         await message.answer(
-            f"🏆 <b>Победа!</b>\n✨ +{xp} XP\n\n"
-            "Сыграй ещё раз и попробуй побить свой результат.",
+            f"🏆 <b>Победа!</b>\n✨ +{xp} XP"
+            + (f"\n🧱 Башня пройдена: <b>{data.get('floors', 0)}/5 этажей</b>" if finished_game.kind == "tower" else "")
+            + "\n\nСыграй ещё раз и попробуй улучшить результат.",
             reply_markup=mini_games_keyboard(),
         )
         return
