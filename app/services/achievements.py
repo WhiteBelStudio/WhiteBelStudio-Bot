@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Achievement, CoinTransaction, Conversation, EconomyAccount, Friendship, GameProfile, MessageRecord, PvpMatch, ReputationEvent, CommunityReputationVote, UserAchievement
 
@@ -144,7 +144,7 @@ async def _metrics(session: AsyncSession,user_id:int)->dict[str,int]:
         "transactions":int(await scalar(select(func.count(CoinTransaction.id)).where(CoinTransaction.user_id==user_id)) or 0),
         "pvp_matches":int(await scalar(select(func.count(PvpMatch.id)).where(or_(PvpMatch.creator_id==user_id,PvpMatch.opponent_id==user_id))) or 0),
         "pvp_wins":int(await scalar(select(func.count(PvpMatch.id)).where(PvpMatch.winner_id==user_id)) or 0),
-        "pvp_opponents":int(await scalar(select(func.count(func.distinct(func.case((PvpMatch.creator_id==user_id,PvpMatch.opponent_id),else_=PvpMatch.creator_id)))).where(or_(PvpMatch.creator_id==user_id,PvpMatch.opponent_id==user_id),PvpMatch.opponent_id.is_not(None))) or 0),
+        "pvp_opponents":int(await scalar(select(func.count(func.distinct(case((PvpMatch.creator_id==user_id,PvpMatch.opponent_id),else_=PvpMatch.creator_id)))).where(or_(PvpMatch.creator_id==user_id,PvpMatch.opponent_id==user_id),PvpMatch.opponent_id.is_not(None))) or 0),
         "active_days":int(await scalar(select(func.count(func.distinct(func.date(MessageRecord.created_at)))).where(MessageRecord.sender_id==user_id)) or 0),
         "earned_achievements":int(await scalar(select(func.count(UserAchievement.id)).where(UserAchievement.user_id==user_id)) or 0)}
 
