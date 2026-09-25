@@ -31,6 +31,14 @@ def test_valid_init_data(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.query_id == "AAE-test"
 
 
+def test_duplicate_keys_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    token = "123456:TEST"
+    monkeypatch.setenv("BOT_TOKEN", token)
+    data = make_init_data(token)
+    with pytest.raises(TelegramInitDataError):
+        validate_telegram_init_data(data + "&auth_date=1")
+
+
 def test_invalid_hash_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BOT_TOKEN", "123456:TEST")
     with pytest.raises(TelegramInitDataError):
