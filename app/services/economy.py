@@ -232,15 +232,20 @@ async def list_shop_items(session: AsyncSession, category: str | None = None) ->
 
 
 async def purchase_item(session: AsyncSession, user_id: int, item_id: int) -> tuple[ShopItem, UserInventory, Decimal]:
-    item = await session.get(ShopItem, item_id)
+    item = await session.get(ShopItem, item_id, with_for_update=True)
     if item is None or not item.is_active:
         raise ValueError("item_not_found")
 
-    balance = await get_balance(session, user_id)
-    if balance < item.price:
+    account = await get_or_create_economy(session, user_id)
+    await session.refresh(account, with_for_update=True)
+    balance = account.balance
+    price = Decimal(item.price).quantize(Decimal("0.1"))
+    if price < 0:
+        raise ValueError("invalid_item_price")
+    if balance < price:
         raise ValueError("insufficient_funds")
 
-    new_balance = await change_balance(session, user_id, -item.price, "shop_purchase", item_id=item.id)
+    new_balance = await change_balance(session, user_id, -price, "shop_purchase", item_id=item.id)
     result = await session.execute(
         select(UserInventory).where(
             UserInventory.user_id == user_id,
@@ -266,16 +271,21 @@ async def gift_item(
 ) -> tuple[ShopItem, Decimal]:
     if sender_id == recipient_id:
         raise ValueError("self_gift")
-    item = await session.get(ShopItem, item_id)
+    item = await session.get(ShopItem, item_id, with_for_update=True)
     if item is None or not item.is_active or item.category != "gift":
         raise ValueError("item_not_found")
 
-    balance = await get_balance(session, sender_id)
-    if balance < item.price:
+    sender = await get_or_create_economy(session, sender_id)
+    await session.refresh(sender, with_for_update=True)
+    balance = sender.balance
+    price = Decimal(item.price).quantize(Decimal("0.1"))
+    if price < 0:
+        raise ValueError("invalid_item_price")
+    if balance < price:
         raise ValueError("insufficient_funds")
 
     new_balance = await change_balance(
-        session, sender_id, -item.price, "gift_sent",
+        session, sender_id, -price, "gift_sent",
         reference_user_id=recipient_id, item_id=item.id,
     )
     result = await session.execute(
