@@ -74,6 +74,40 @@ def start_game(user_id: int, kind: str) -> MiniGame:
             datetime.utcnow(),
             {"difficulty": "hard"},
         )
+    elif kind == "sequence":
+        length = random.randint(5, 9)
+        seq = [random.randint(1, 9) for _ in range(length)]
+        answer = "".join(map(str, seq))
+        game = MiniGame(
+            "sequence",
+            f"🔢 Восстанови последовательность. Первые числа: <b>{answer[:3]}…</b>",
+            answer,
+            4,
+            datetime.utcnow(),
+            {"difficulty": "expert", "length": length},
+        )
+    elif kind == "logic":
+        a, b, c = random.sample(range(2, 10), 3)
+        answer = str(b)
+        game = MiniGame(
+            "logic",
+            f"🧩 Если {a} → {a*a}, {b} → ?, {c} → {c*c}, какое число должно стоять вместо ?",
+            answer,
+            2,
+            datetime.utcnow(),
+            {"difficulty": "hard"},
+        )
+    elif kind == "anagram":
+        answer = random.choice(WORDS)
+        scrambled = "".join(random.sample(answer, len(answer)))
+        game = MiniGame(
+            "anagram",
+            f"🔀 Слово зашифровано перестановкой букв: <b>{scrambled}</b>",
+            answer,
+            2,
+            datetime.utcnow(),
+            {"difficulty": "expert"},
+        )
     elif kind == "memory":
         length = random.randint(5, 8)
         sequence = "".join(str(random.randint(0, 9)) for _ in range(length))
@@ -142,6 +176,9 @@ def game_catalog_text() -> str:
         "🧠 <b>Математический штурм</b> — 3 попытки, сложность Normal/Hard/Expert.\n"
         "🔐 <b>Взломщик</b> — угадай 4-значный код за 6 попыток по подсказкам.\n"
         "🔤 <b>Шифровальщик</b> — восстанови перемешанное слово за 3 попытки.\n"
-        "🧠 <b>Память</b> — запомни последовательность из 5–8 цифр.\n\n"
+        "🧠 <b>Память</b> — запомни последовательность из 5–8 цифр.\n"
+        "🔢 <b>Последовательность</b> — восстанови скрытую закономерность.\n"
+        "🧩 <b>Логика</b> — реши задачу на закономерность за 2 попытки.\n"
+        "🔀 <b>Анаграмма PRO</b> — восстанови сложное слово за 2 попытки.\n\n"
         "За победу начисляется XP. Одновременно активна только одна игра."
     )
