@@ -23,7 +23,13 @@ from aiogram.types import (
 
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
-from app.services.community import (\n    format_community_reputation,\n    get_reputation_history,\n    get_reputation_score,\n    get_reputation_top,\n)
+from app.bot.middleware import ChatReputationMiddleware
+from app.services.community import (
+    format_community_reputation,
+    get_reputation_history,
+    get_reputation_score,
+    get_reputation_top,
+)
 from app.services.social import (
     find_users,
     format_social_user,
@@ -40,7 +46,6 @@ load_dotenv()
 
 
 dp = Dispatcher()
-from app.bot.middleware import ChatReputationMiddleware
 dp.message.middleware(ChatReputationMiddleware())
 
 
