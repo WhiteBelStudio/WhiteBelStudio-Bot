@@ -137,7 +137,6 @@ async def _metrics(session: AsyncSession,user_id:int)->dict[str,int]:
         "games":p.games_played if p else 0,"wins":p.wins if p else 0,"losses":p.losses if p else 0,"draws":p.draws if p else 0,"level":p.level if p else 0,"xp":p.experience if p else 0,
         "messages":int(await scalar(select(func.count(MessageRecord.id)).where(MessageRecord.sender_id==user_id)) or 0),
         "conversations":int(await scalar(select(func.count(Conversation.id)).where(or_(Conversation.user_low_id==user_id,Conversation.user_high_id==user_id))) or 0),
-        "friends":int(await scalar(select(func.count(Friendship.id)).where(or_(Friendship.user_low_id==user_id,Friendship.user_high_id==user_id))) or 0),
         "reputation":int(await scalar(select(func.coalesce(func.sum(ReputationEvent.delta),0)).where(ReputationEvent.user_id==user_id)) or 0),
         "rep_voters":int(await scalar(select(func.count(func.distinct(CommunityReputationVote.rater_id))).where(CommunityReputationVote.rated_id==user_id)) or 0),
         "balance":int(a.balance) if a else 0,"lifetime_earned":int(a.lifetime_earned) if a else 0,"lifetime_spent":int(a.lifetime_spent) if a else 0,
