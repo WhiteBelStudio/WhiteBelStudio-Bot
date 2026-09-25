@@ -2,14 +2,14 @@
 
 ## 1. Purpose
 
-WhiteBelStudio is a Telegram-first social/community platform with games, economy, moderation, API services, and a future Mini App.
+WhiteBelStudio is a Telegram-first community platform with games, economy, moderation, API services, and a future Mini App.
 
 The architecture is modular so that each subsystem can be implemented and tested independently without putting business logic into Telegram handlers.
 
 ## 2. Runtime components
 
 - **Telegram Bot** — aiogram 3.x; receives updates and calls application services.
-- **Application services** — business use-cases; the main boundary for user, social, game, economy, moderation, and admin operations.
+- **Application services** — business use-cases; the main boundary for user, reputation, game, economy, moderation, and admin operations.
 - **Repositories** — database access only; no Telegram UI logic.
 - **PostgreSQL** — production database and source of persistent application state.
 - **Alembic** — schema migrations.
@@ -91,7 +91,7 @@ Contains adapters for Telegram and any future external providers. External SDK d
 Each subsystem owns its data and service boundary:
 
 - Users/profile → user domain
-- Social/friends → social domain
+- Community/reputation → reputation domain
 - Reputation → reputation domain
 - Games/PvP → game domain
 - Economy → economy domain
@@ -124,3 +124,17 @@ Hosts the Mini App frontend. It consumes the FastAPI API.
 6. New features receive tests before being marked production-ready.
 7. A checklist item becomes green only after implementation and verification.
 8. Production code must remain compatible with Python 3.12.
+
+## 9. Current implementation boundary
+
+The repository currently uses main.py as the composition root and keeps Telegram feature routers under app/bot/. Business logic is concentrated in app/services/, persistence primitives in app/db/, and migrations in migrations/.
+
+Current enforced boundaries:
+
+- The retired social/friends subsystem is not a runtime dependency.
+- Telegram routers own presentation and update handling; services own domain operations.
+- Database access is centralized through app/db/engine.py and repository/service layers.
+- Global error handling is centralized at the dispatcher boundary; expected domain errors are handled locally.
+- Production startup validates environment, compiles the application, applies migrations, and verifies the resulting schema before starting the bot.
+
+Future extraction of main.py into dedicated bot modules is a maintainability improvement, not a prerequisite for the current runtime boundary.
