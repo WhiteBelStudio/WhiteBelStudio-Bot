@@ -12,6 +12,7 @@ from app.services.community import (
     get_reputation_history,
     get_reputation_score,
     get_reputation_top,
+    get_reputation_vote_stats,
     set_chat_reputation_vote,
 )
 from app.services.social import get_user_by_username
@@ -49,7 +50,7 @@ async def _handle_group_reputation(message: Message) -> bool:
                 return True
             lines = ["🏆 <b>Топ репутации этого чата</b>", ""]
             for index, (_, name, score) in enumerate(rows, 1):
-                lines.append(f"{index}. {name} — <b>{score}</b>")
+                lines.append(f"{index}. {name} — <b>{score:+d}</b>")
             await message.answer("\n".join(lines))
             return True
 
@@ -65,20 +66,28 @@ async def _handle_group_reputation(message: Message) -> bool:
         if target is None:
             score = await get_reputation_score(session, actor.id, chat.id)
             history = await get_reputation_history(session, actor.id, 10, chat.id)
+            stats = await get_reputation_vote_stats(session, actor.id, chat.id)
             name = " ".join(p for p in (actor.first_name, actor.last_name) if p) or "Участник"
-            await message.answer(format_community_reputation(name, score, history))
+            await message.answer(format_community_reputation(name, score, history, stats))
             return True
 
         target_user, _ = await sync_telegram_user(session, target)
         if target_user.id == actor.id:
             await message.answer("🙂 Нельзя изменять собственную репутацию.")
             return True
+        if target_user.is_bot:
+            await message.answer("🤖 Репутацию боту изменять нельзя.")
+            return True
+        if not target_user.is_active:
+            await message.answer("❌ Этот пользователь сейчас неактивен.")
+            return True
 
         if command == "/rep":
             score = await get_reputation_score(session, target_user.id, chat.id)
             history = await get_reputation_history(session, target_user.id, 10, chat.id)
+            stats = await get_reputation_vote_stats(session, target_user.id, chat.id)
             name = " ".join(p for p in (target_user.first_name, target_user.last_name) if p) or "Участник"
-            await message.answer(format_community_reputation(name, score, history))
+            await message.answer(format_community_reputation(name, score, history, stats))
             return True
 
         vote = 1 if command == "/rep+" else -1
@@ -94,13 +103,21 @@ async def _handle_group_reputation(message: Message) -> bool:
             }
             await message.answer(messages.get(str(exc), "⚠️ Не удалось изменить репутацию."))
             return True
+
         if not changed:
-            await message.answer("ℹ️ Ты уже поставил такую оценку этому участнику.")
+            await message.answer("ℹ️ Такая оценка уже установлена. Чтобы изменить её, поставь противоположную.")
             return True
 
+        stats = await get_reputation_vote_stats(session, target_user.id, chat.id)
+        level_name = "Легенда" if score >= 100 else "Авторитет" if score >= 50 else "Активный участник" if score >= 25 else "Участник" if score >= 10 else "Новичок" if score >= 0 else "Под наблюдением"
         sign = "+1 ⭐" if vote > 0 else "-1 ⭐"
         name = " ".join(p for p in (target_user.first_name, target_user.last_name) if p) or "Участник"
-        await message.answer(f"{sign} <b>{name}</b>\nРепутация в этом чате: <b>{score}</b>")
+        await message.answer(
+            f"{sign} <b>{name}</b>\n"
+            f"⭐ Репутация: <b>{score:+d}</b>\n"
+            f"🏅 Уровень: <b>{level_name}</b>\n"
+            f"👍 +{stats[1]}  |  👎 -{stats[2]}"
+        )
         return True
 
     return True
