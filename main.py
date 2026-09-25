@@ -23,8 +23,6 @@ from aiogram.types import (
 
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
-from app.bot.middleware import ChatActivityMiddleware
-from app.services.chat import get_chat_stats, get_member_stats
 from app.services.community import (\n    format_community_reputation,\n    get_reputation_history,\n    get_reputation_score,\n    get_reputation_top,\n)
 from app.services.social import (
     find_users,
@@ -42,7 +40,9 @@ load_dotenv()
 
 
 dp = Dispatcher()
-dp.message.middleware(ChatActivityMiddleware())
+from app.bot.middleware import ChatReputationMiddleware
+dp.message.middleware(ChatReputationMiddleware())
+
 
 
 @dp.message(CommandStart())
@@ -108,67 +108,6 @@ async def menu_callback_handler(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@dp.message(Command("chatstats"))
-async def chat_stats_handler(message: Message) -> None:
-    if message.chat.type not in {"group", "supergroup"}:
-        await message.answer("ℹ️ Эта команда работает внутри группового чата.")
-        return
-
-    if not os.getenv("DATABASE_URL", "").strip():
-        await message.answer("🗄 База данных пока не настроена.")
-        return
-
-    try:
-        async for session in get_session():
-            chat, members, messages = await get_chat_stats(
-                session,
-                message.chat.id,
-            )
-
-        if chat is None:
-            await message.answer("📊 Статистика пока пустая. Начни общаться в чате.")
-            return
-
-        await message.answer(
-            f"📊 <b>Статистика чата</b>\n\n"
-            f"💬 {chat.title}\n"
-            f"👥 Участников в статистике: <b>{members}</b>\n"
-            f"📝 Сообщений: <b>{messages}</b>"
-        )
-    except Exception as exc:
-        print(f"[chat] stats failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось загрузить статистику чата.")
-
-
-@dp.message(Command("mystats"))
-async def my_stats_handler(message: Message) -> None:
-    if message.chat.type not in {"group", "supergroup"} or message.from_user is None:
-        await message.answer("ℹ️ Эта команда работает внутри группового чата.")
-        return
-
-    if not os.getenv("DATABASE_URL", "").strip():
-        await message.answer("🗄 База данных пока не настроена.")
-        return
-
-    try:
-        async for session in get_session():
-            user, _ = await sync_telegram_user(session, message.from_user)
-            stats = await get_member_stats(session, message.chat.id, user.id)
-
-        if stats is None:
-            await message.answer("📊 Ты пока не отмечен в статистике этого чата.")
-            return
-
-        await message.answer(
-            f"📈 <b>Твоя активность</b>\n\n"
-            f"💬 Сообщений: <b>{stats.message_count}</b>\n"
-            f"🤖 Команд: <b>{stats.command_count}</b>"
-        )
-    except Exception as exc:
-        print(f"[chat] member stats failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось загрузить твою статистику.")
-
-
 @dp.message(Command("help"))
 async def help_handler(message: Message) -> None:
     await message.answer(
@@ -180,8 +119,6 @@ async def help_handler(message: Message) -> None:
         "📜 /rules — правила\n"
         "🔎 /find — поиск участников\n"
         "👥 /friends — друзья\n"
-        "📊 /chatstats — статистика чата\n"
-        "📈 /mystats — моя активность\n\n"
         "Модерационные команды доступны администраторам."
     )
 
@@ -448,8 +385,6 @@ async def setup_bot_commands(bot: Bot) -> None:
             BotCommand(command="rules", description="Правила сообщества"),
             BotCommand(command="find", description="Найти участника"),
             BotCommand(command="friends", description="Друзья"),
-            BotCommand(command="chatstats", description="Статистика чата"),
-            BotCommand(command="mystats", description="Моя активность"),
         ],
         scope=BotCommandScopeDefault(),
     )
