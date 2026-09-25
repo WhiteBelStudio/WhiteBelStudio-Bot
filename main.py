@@ -30,6 +30,7 @@ from app.services.community import (
     get_reputation_score,
     get_reputation_top,
 )
+from app.services.games import get_game_leaderboard, get_game_profile
 from app.services.social import (
     find_users,
     format_social_user,
@@ -174,6 +175,51 @@ async def top_rep_handler(message: Message) -> None:
     except Exception as exc:
         print(f"[reputation] top failed: {exc}", flush=True)
         await message.answer("⚠️ Не удалось загрузить топ.")
+
+
+@dp.message(Command("game"))
+async def game_handler(message: Message) -> None:
+    if message.from_user is None:
+        return
+
+    try:
+        async for session in get_session():
+            user, _ = await sync_telegram_user(session, message.from_user)
+            profile = await get_game_profile(session, user.id)
+
+        await message.answer(
+            "🎮 <b>Игровой профиль</b>\\n\\n"
+            f"👤 {user.first_name}\\n"
+            f"⭐ Уровень: <b>{profile.level}</b>\\n"
+            f"✨ Опыт: <b>{profile.experience}</b>\\n"
+            f"📈 До следующего уровня: <b>{profile.experience_to_next}</b>\\n\\n"
+            f"🎯 Игр: <b>{profile.games_played}</b>\\n"
+            f"🏆 Побед: <b>{profile.wins}</b>\\n"
+            f"💠 Поражений: <b>{profile.losses}</b>\\n"
+            f"🤝 Ничьих: <b>{profile.draws}</b>"
+        )
+    except Exception as exc:
+        print(f"[game] profile failed: {exc}", flush=True)
+        await message.answer("⚠️ Не удалось загрузить игровой профиль.")
+
+
+@dp.message(Command("gametop"))
+async def game_top_handler(message: Message) -> None:
+    try:
+        async for session in get_session():
+            rows = await get_game_leaderboard(session, 10)
+
+        if not rows:
+            await message.answer("🎮 Пока никто не играл.")
+            return
+
+        lines = ["🏆 <b>Топ игроков</b>", ""]
+        for index, (_, name, level, experience) in enumerate(rows, 1):
+            lines.append(f"{index}. {name} — ур. <b>{level}</b> · {experience} XP")
+        await message.answer("\\n".join(lines))
+    except Exception as exc:
+        print(f"[game] leaderboard failed: {exc}", flush=True)
+        await message.answer("⚠️ Не удалось загрузить топ игроков.")
 
 
 @dp.message(Command("profile"))
@@ -384,6 +430,8 @@ async def setup_bot_commands(bot: Bot) -> None:
         [
             BotCommand(command="start", description="Открыть меню"),
             BotCommand(command="help", description="Помощь"),
+            BotCommand(command="game", description="Игровой профиль"),
+            BotCommand(command="gametop", description="Топ игроков"),
             BotCommand(command="profile", description="Мой профиль"),
             BotCommand(command="rep", description="Моя репутация"),
             BotCommand(command="toprep", description="Топ репутации"),
