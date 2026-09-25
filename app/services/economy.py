@@ -149,8 +149,18 @@ async def purchase_item(session: AsyncSession, user_id: int, item_id: int) -> tu
         raise ValueError("insufficient_funds")
 
     await change_balance(session, user_id, -item.price, "shop_purchase", item_id=item.id)
-    inventory = UserInventory(user_id=user_id, item_id=item.id, quantity=1)
-    session.add(inventory)
+    result = await session.execute(
+        select(UserInventory).where(
+            UserInventory.user_id == user_id,
+            UserInventory.item_id == item.id,
+        )
+    )
+    inventory = result.scalar_one_or_none()
+    if inventory is None:
+        inventory = UserInventory(user_id=user_id, item_id=item.id, quantity=1)
+        session.add(inventory)
+    else:
+        inventory.quantity += 1
     await session.flush()
     await session.commit()
     return item, inventory, balance - item.price
@@ -176,7 +186,18 @@ async def gift_item(
         session, sender_id, -item.price, "gift_sent",
         reference_user_id=recipient_id, item_id=item.id,
     )
-    session.add(UserInventory(user_id=recipient_id, item_id=item.id, quantity=1))
+    result = await session.execute(
+        select(UserInventory).where(
+            UserInventory.user_id == recipient_id,
+            UserInventory.item_id == item.id,
+        )
+    )
+    inventory = result.scalar_one_or_none()
+    if inventory is None:
+        session.add(UserInventory(user_id=recipient_id, item_id=item.id, quantity=1))
+    else:
+        inventory.quantity += 1
+
     session.add(CoinTransaction(
         user_id=recipient_id,
         amount=Decimal("0.0"),
