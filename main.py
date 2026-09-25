@@ -30,7 +30,8 @@ from app.services.community import (
     get_reputation_score,
     get_reputation_top,
 )
-from app.services.games import get_game_leaderboard, get_game_profile
+from app.services.games import get_game_leaderboard, get_game_profile, record_game_result
+from app.services.minigames import cancel_game, check_answer, game_catalog_text, get_game, start_game
 from app.services.social import (
     find_users,
     format_social_user,
@@ -114,6 +115,10 @@ async def menu_callback_handler(callback: CallbackQuery) -> None:
         await show_help_categories(callback.message, edit=True)
     elif action.startswith("help_category:"):
         await show_help_category(callback.message, action.split(":", 1)[1])
+    elif action == "mini_games":
+        await show_mini_games(callback.message, edit=True)
+    elif action.startswith("mini_start:"):
+        await start_mini_game(callback.message, action.split(":", 1)[1])
 
     await callback.answer()
 
@@ -139,7 +144,9 @@ HELP_CATEGORIES = {
     "game": (
         "🎮 <b>Игровые команды</b>\n\n"
         "🎮 /game — игровой профиль\n"
-        "🏆 /gametop — топ игроков"
+        "🏆 /gametop — топ игроков\n"
+        "🕹 /games — мини-игры\n"
+        "🛑 /cancelgame — отменить активную мини-игру"
     ),
     "moderation": (
         "🛡 <b>Модерация</b>\n\n"
@@ -241,6 +248,125 @@ async def top_rep_handler(message: Message) -> None:
     except Exception as exc:
         print(f"[reputation] top failed: {exc}", flush=True)
         await message.answer("⚠️ Не удалось загрузить топ.")
+
+
+
+def mini_games_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🧮 Штурм", callback_data="mini_start:math"),
+                InlineKeyboardButton(text="🔐 Взломщик", callback_data="mini_start:code"),
+            ],
+            [
+                InlineKeyboardButton(text="🔤 Шифровальщик", callback_data="mini_start:word"),
+                InlineKeyboardButton(text="🧠 Память", callback_data="mini_start:memory"),
+            ],
+        ]
+    )
+
+
+def mini_back_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🕹 Все мини-игры", callback_data="mini_games")]
+        ]
+    )
+
+
+async def show_mini_games(message: Message, *, edit: bool = False) -> None:
+    text = game_catalog_text()
+    keyboard = mini_games_keyboard()
+    if edit:
+        await message.edit_text(text, reply_markup=keyboard)
+    else:
+        await message.answer(text, reply_markup=keyboard)
+
+
+async def start_mini_game(message: Message, kind: str) -> None:
+    if message.from_user is None:
+        return
+    if get_game(message.from_user.id) is not None:
+        await message.answer("⚠️ У тебя уже есть активная игра. Закончи её или отправь /cancelgame.")
+        return
+    try:
+        game = start_game(message.from_user.id, kind)
+        await message.answer(
+            f"🎮 <b>Игра началась!</b>\n\n{game.prompt}\n\n"
+            f"🎯 Попыток: <b>{game.attempts_left}</b>\n"
+            "Отправь ответ обычным сообщением.",
+            reply_markup=mini_back_keyboard(),
+        )
+    except ValueError:
+        await message.answer("⚠️ Такая игра пока недоступна.")
+
+
+@dp.message(Command("games"))
+async def mini_games_handler(message: Message) -> None:
+    await show_mini_games(message)
+
+
+@dp.message(Command("cancelgame"))
+async def cancel_game_handler(message: Message) -> None:
+    if message.from_user is None:
+        return
+    if get_game(message.from_user.id) is None:
+        await message.answer("ℹ️ Активной игры нет.")
+        return
+    cancel_game(message.from_user.id)
+    await message.answer("🛑 Игра отменена.")
+
+
+@dp.message()
+async def mini_game_answer_handler(message: Message) -> None:
+    if message.from_user is None or not (message.text or "").strip():
+        return
+    if (message.text or "").startswith("/"):
+        return
+    game = get_game(message.from_user.id)
+    if game is None:
+        return
+
+    status, finished_game, data = check_answer(message.from_user.id, message.text or "")
+    if status == "invalid":
+        await message.answer("❌ Некорректный формат ответа. Попробуй ещё раз.")
+        return
+    if status in {"progress", "wrong"}:
+        if status == "progress" and game.kind == "code":
+            await message.answer(
+                f"🔎 Совпадений на правильных местах: <b>{data['exact']}</b>\n"
+                f"🎯 Осталось попыток: <b>{data['attempts_left']}</b>"
+            )
+        else:
+            await message.answer(f"❌ Неверно. Осталось попыток: <b>{data['attempts_left']}</b>")
+        return
+
+    if status == "win":
+        xp = {"math": 40, "code": 65, "word": 50, "memory": 75}.get(finished_game.kind, 40)
+        try:
+            async for session in get_session():
+                await record_game_result(session, message.from_user.id, result="win", experience=xp)
+        except Exception as exc:
+            print(f"[minigame] win save failed: {exc}", flush=True)
+        await message.answer(
+            f"🏆 <b>Победа!</b>\n✨ +{xp} XP\n\n"
+            "Сыграй ещё раз и попробуй побить свой результат.",
+            reply_markup=mini_games_keyboard(),
+        )
+        return
+
+    if status == "loss":
+        answer = data.get("answer", "неизвестен")
+        try:
+            async for session in get_session():
+                await record_game_result(session, message.from_user.id, result="loss", experience=10)
+        except Exception as exc:
+            print(f"[minigame] loss save failed: {exc}", flush=True)
+        await message.answer(
+            f"💥 <b>Игра окончена.</b>\nПравильный ответ: <b>{answer}</b>\n"
+            "✨ +10 XP за попытку.",
+            reply_markup=mini_games_keyboard(),
+        )
 
 
 @dp.message(Command("game"))
@@ -498,6 +624,7 @@ async def setup_bot_commands(bot: Bot) -> None:
             BotCommand(command="help", description="Помощь"),
             BotCommand(command="game", description="Игровой профиль"),
             BotCommand(command="gametop", description="Топ игроков"),
+            BotCommand(command="games", description="Мини-игры"),
             BotCommand(command="profile", description="Мой профиль"),
             BotCommand(command="rep", description="Моя репутация"),
             BotCommand(command="toprep", description="Топ репутации"),
