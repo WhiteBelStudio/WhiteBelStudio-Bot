@@ -1,65 +1,170 @@
 # WhiteBelStudio Bot
 
-Production Telegram bot platform by WhiteBelStudio.
+Production Telegram community platform by WhiteBelStudio.
 
-## Architecture\n\nThe application architecture and module boundaries are documented in `docs/ARCHITECTURE.md`. The project follows a layered design: Telegram/API -> application services -> repositories -> PostgreSQL. The Mini App communicates only through the API.\n\n## Stack
+## What it contains
+
+- Telegram bot on aiogram 3.x
+- PostgreSQL persistence
+- Alembic migrations
+- FastAPI API
+- Telegram Mini App authentication
+- economy, shop, achievements, games and PvP
+- community reputation
+- moderation/admin functionality
+- structured logging and request IDs
+- CI/CD and release automation
+- Pterodactyl production runtime
+
+The retired social/friends subsystem is intentionally not part of the current architecture.
+
+## Architecture
+
+```text
+Telegram Bot ──┐
+               ├──> Services ──> DB layer ──> PostgreSQL
+FastAPI API ───┘
+     ↑
+Mini App (Vercel)
+```
+
+The Mini App never connects directly to PostgreSQL. Telegram identity is verified through signed Mini App `initData` and resolved against the same `users` table used by the bot.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Stack
 
 - Python 3.12+
 - aiogram 3.x
-- PostgreSQL for production
-- FastAPI for API services
-- Pterodactyl for the bot runtime
+- FastAPI
+- SQLAlchemy async + asyncpg
+- PostgreSQL
+- Alembic
+- Pydantic
+- pytest
+- Ruff
+- GitHub Actions
+- Pterodactyl
 - Vercel for the Mini App
-- GitHub as the source of truth
 
-## Pterodactyl
+## Production
 
-Set the server startup command to:
+Pterodactyl starts the application with:
 
 ```bash
 python start.py
 ```
 
-The bootstrap performs:
+The bootstrap:
 
-1. environment validation;
-2. safe GitHub update from `GITHUB_REPOSITORY` / `GITHUB_BRANCH`;
-3. dependency installation;
-4. database migrations when configured;
-5. Python health/compile checks;
-6. bot startup.
+1. validates required environment;
+2. updates the Git checkout when enabled;
+3. installs dependencies;
+4. compiles the application;
+5. waits for PostgreSQL;
+6. runs Alembic migrations;
+7. verifies the migrated schema;
+8. starts the bot and API.
 
-Runtime data is kept outside the Git-tracked application code:
+Production deployment documentation: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-- `.env` — secrets/configuration;
-- `data/` — runtime data and database files if used;
-- `logs/` — logs;
-- `backups/` — backups.
+## Configuration
 
-Do not commit real secrets.
+Start from:
 
-## Environment
+```text
+.env.example
+```
 
-Copy `.env.example` to `.env` and configure at minimum:
+Never commit real secrets.
+
+Important production variables include:
 
 - `BOT_TOKEN`
 - `OWNER_ID`
-- `DATABASE_URL` for PostgreSQL production
-
-For the GitHub updater:
-
-- `GITHUB_REPOSITORY=WhiteBelStudio/WhiteBelStudio-Bot`
-- `GITHUB_BRANCH=main`
-- `GITHUB_UPDATE_ENABLED=true`
-
-A GitHub token is only needed if the deployment requires access to a private repository.
+- `DATABASE_URL`
+- `APP_ENV`
+- `GITHUB_REPOSITORY`
+- `GITHUB_BRANCH`
+- `GITHUB_UPDATE_ENABLED`
+- `API_HOST`
+- `API_PORT`
+- `API_CORS_ORIGINS`
+- `MINI_APP_INIT_DATA_MAX_AGE`
 
 ## Development
 
+Install dependencies:
+
 ```bash
 python -m pip install -r requirements.txt
-python -m compileall -q .
-python -m pytest
 ```
 
-Production is started through `start.py`.
+Run fast checks:
+
+```bash
+python -m compileall -q app main.py start.py tests
+python -m ruff check app tests main.py start.py
+python -m pytest -m "not integration"
+```
+
+Integration tests require PostgreSQL:
+
+```bash
+python -m pytest -m integration
+```
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+## API
+
+Base API prefix:
+
+```text
+/api/v1
+```
+
+Health:
+
+- `/health`
+- `/health/live`
+- `/health/ready`
+- `/api/v1/health`
+
+Protected business endpoints require Telegram signed `X-Telegram-Init-Data`.
+
+See [docs/API.md](docs/API.md).
+
+## Operations
+
+For incidents, deployment failures, database issues and API troubleshooting, see [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+## CI/CD
+
+GitHub Actions validates:
+
+- Ruff;
+- Python compilation;
+- unit/API tests;
+- PostgreSQL integration tests;
+- migration state;
+- dependency audit;
+- source artifact creation.
+
+Tagged releases use the release workflow. Production deployment uses the configured Pterodactyl deployment workflow.
+
+A green CI run proves repository gates passed; it does not by itself prove that the live server is healthy.
+
+## Documentation map
+
+| Document | Purpose |
+| --- | --- |
+| [Architecture](docs/ARCHITECTURE.md) | Components, boundaries and data ownership |
+| [Deployment](docs/DEPLOYMENT.md) | Pterodactyl production deployment |
+| [Development](docs/DEVELOPMENT.md) | Local development and contribution workflow |
+| [API](docs/API.md) | HTTP endpoints and authentication |
+| [Operations](docs/OPERATIONS.md) | Incident and troubleshooting runbook |
+
+## Production rule
+
+A feature is production-ready only when implementation, tests, documentation and runtime verification are all complete.
