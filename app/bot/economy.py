@@ -100,22 +100,17 @@ async def daily_handler(message: Message) -> None:
             result = await claim_daily(session, user.id)
         if not result.claimed:
             await message.answer(
-                f"🎁 {result.message}
-🔥 Серия: <b>{result.streak} дней</b>"
+                f"🎁 {result.message}\n🔥 Серия: <b>{result.streak} дней</b>"
             )
             return
         await message.answer(
-            f"🎁 <b>Ежедневная награда получена!</b>
-
-"
-            f"🪙 +{result.amount:.1f}
-"
+            f"🎁 <b>Ежедневная награда получена!</b>\n\n"
+            f"🪙 +{result.amount:.1f}\n"
             f"🔥 Серия: <b>{result.streak} дней</b>"
         )
     except Exception as exc:
         print(f"[economy] daily failed: {exc}", flush=True)
         await message.answer("⚠️ Не удалось получить ежедневную награду.")
-
 
 @router.message(Command("shop"))
 async def shop_handler(message: Message) -> None:
