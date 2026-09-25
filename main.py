@@ -109,24 +109,90 @@ async def menu_callback_handler(callback: CallbackQuery) -> None:
     elif action == "menu_rules":
         await rules_handler(callback.message)
     elif action == "menu_help":
-        await help_handler(callback.message)
+        await show_help_categories(callback.message, edit=True)
+    elif action == "help_categories":
+        await show_help_categories(callback.message, edit=True)
+    elif action.startswith("help_category:"):
+        await show_help_category(callback.message, action.split(":", 1)[1])
 
     await callback.answer()
 
 
+HELP_CATEGORIES = {
+    "general": (
+        "👤 <b>Основные команды</b>\n\n"
+        "👤 /profile — посмотреть свой профиль\n"
+        "⭐ /rep — посмотреть свою репутацию\n"
+        "🏆 /toprep — топ участников по репутации\n"
+        "📜 /rules — правила сообщества"
+    ),
+    "social": (
+        "👥 <b>Социальные команды</b>\n\n"
+        "🔎 /find [запрос] — найти участника\n"
+        "👥 /friends — список друзей\n"
+        "📨 /requests — входящие заявки в друзья\n"
+        "➕ /addfriend @username — отправить заявку\n"
+        "✅ /accept @username — принять заявку\n"
+        "❌ /decline @username — отклонить заявку\n"
+        "🗑 /removefriend @username — удалить из друзей"
+    ),
+    "game": (
+        "🎮 <b>Игровые команды</b>\n\n"
+        "🎮 /game — игровой профиль\n"
+        "🏆 /gametop — топ игроков"
+    ),
+    "moderation": (
+        "🛡 <b>Модерация</b>\n\n"
+        "Модерационные команды будут доступны после подключения системы модерации."
+    ),
+}
+
+
+def help_categories_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="👤 Основные", callback_data="help_category:general"),
+                InlineKeyboardButton(text="👥 Социальные", callback_data="help_category:social"),
+            ],
+            [
+                InlineKeyboardButton(text="🎮 Игровые", callback_data="help_category:game"),
+                InlineKeyboardButton(text="🛡 Модерация", callback_data="help_category:moderation"),
+            ],
+        ]
+    )
+
+
+def help_back_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К категориям", callback_data="help_categories")]
+        ]
+    )
+
+
+async def show_help_categories(message: Message, *, edit: bool = False) -> None:
+    text = (
+        "❓ <b>Помощь WhiteBelStudio</b>\n\n"
+        "Выбери категорию команд, чтобы посмотреть доступные команды и краткие гайды."
+    )
+    if edit:
+        await message.edit_text(text, reply_markup=help_categories_keyboard())
+    else:
+        await message.answer(text, reply_markup=help_categories_keyboard())
+
+
+async def show_help_category(message: Message, category: str) -> None:
+    content = HELP_CATEGORIES.get(category)
+    if content is None:
+        await message.answer("⚠️ Категория помощи не найдена.")
+        return
+    await message.edit_text(content, reply_markup=help_back_keyboard())
+
+
 @dp.message(Command("help"))
 async def help_handler(message: Message) -> None:
-    await message.answer(
-        "❓ <b>WhiteBelStudio</b>\n\n"
-        "🤖 Я бот-модератор и помощник сообщества.\n\n"
-        "👤 /profile — профиль\n"
-        "⭐ /rep — твоя репутация\n"
-        "🏆 /toprep — участники с высокой репутацией\n"
-        "📜 /rules — правила\n"
-        "🔎 /find — поиск участников\n"
-        "👥 /friends — друзья\n"
-        "Модерационные команды доступны администраторам."
-    )
+    await show_help_categories(message)
 
 
 @dp.message(Command("rules"))
