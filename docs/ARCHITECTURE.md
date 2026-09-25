@@ -117,7 +117,10 @@ FASTAPI_PROCESS ───┘
 
 - There is exactly one production `DATABASE_URL` for the application.
 - The Mini App frontend never receives database credentials.
-- FastAPI resolves the authenticated Telegram user against the same `users` table used by the bot.
+- FastAPI verifies the signed Telegram `initData`, extracts the trusted Telegram user ID, and resolves that ID against the same `users` table used by the bot.
+- The Mini App cannot create a second identity from client-provided profile fields; identity is always bound to Telegram's verified user ID.
+- Invalid, expired, duplicate-key, unregistered, bot, or inactive identities are rejected at the API boundary.
+- `/api/v1/me` exposes a typed response contract and serializes the existing database user; it does not create a Mini App user record.
 - Schema changes are applied once by Alembic; Bot and API use the same migration head.
 - Connection pooling is configured in `app/db/engine.py`; API routes do not create their own database engine.
 - `app/db/health.py` validates the same database and required tables used by the runtime.
