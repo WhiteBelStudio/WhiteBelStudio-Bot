@@ -87,7 +87,11 @@ async def test_readiness_requires_database() -> None:
             response = await client.get("/health/ready")
 
     assert response.status_code == 500
-    assert response.json() == {"detail": "Internal server error"}
+    body = response.json()
+    assert body["error"] == "internal_error"
+    assert body["detail"] == "Internal server error"
+    assert body["status_code"] == 500
+    assert body["request_id"] == response.headers["X-Request-ID"]
 
 
 @pytest.mark.asyncio
@@ -278,3 +282,36 @@ async def test_structured_access_log_contains_request_context(caplog: pytest.Log
     assert record.path == "/health/live"
     assert record.status_code == 200
     assert isinstance(record.duration_ms, float)
+
+
+@pytest.mark.asyncio
+async def test_http_errors_use_unified_shape() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/v1/not-found")
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "http_error"
+    assert body["detail"] == "Not Found"
+    assert body["status_code"] == 404
+    assert body["request_id"] == response.headers["X-Request-ID"]
+
+
+@pytest.mark.asyncio
+async def test_validation_errors_use_unified_shape() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/v1/conversations/not-an-integer/messages")
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"] == "validation_error"
+    assert body["detail"] == "Request validation failed"
+    assert body["status_code"] == 422
+    assert body["request_id"] == response.headers["X-Request-ID"]
+    assert body["errors"]
