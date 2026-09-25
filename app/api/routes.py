@@ -83,7 +83,16 @@ async def games_profile(
     session=Depends(get_database_session),
 ) -> GameProfileResponse:
     profile = await get_game_profile(session, user.id)
-    return GameProfileResponse.model_validate(profile.__dict__)
+    return GameProfileResponse(
+        user_id=profile.user_id,
+        level=profile.level,
+        experience=profile.experience,
+        experience_to_next=profile.experience_to_next,
+        games_played=profile.games_played,
+        wins=profile.wins,
+        losses=profile.losses,
+        draws=profile.draws,
+    )
 
 
 @router.get(
