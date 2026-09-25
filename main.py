@@ -103,7 +103,17 @@ async def start_handler(message: Message) -> None:
     )
 
 
-@dp.callback_query()
+@dp.callback_query(F.data.in_({
+    "menu_profile",
+    "menu_reputation",
+    "menu_rules",
+    "shop",
+    "menu_help",
+    "help_categories",
+    "mini_games",
+    "mini_games:regular",
+    "mini_games:pvp",
+}))
 async def menu_callback_handler(callback: CallbackQuery) -> None:
     if callback.message is None:
         await callback.answer()
