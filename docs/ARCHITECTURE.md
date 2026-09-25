@@ -101,7 +101,29 @@ Each subsystem owns its data and service boundary:
 
 Cross-domain operations go through services rather than direct table manipulation from handlers.
 
-## 7. Deployment model
+## 7. Unified database contract
+
+Bot, FastAPI, and the Mini App are one application and use one PostgreSQL database.
+
+```text
+BOT_PROCESS ───────┐
+                   ├──> DATABASE_URL ──> PostgreSQL
+FASTAPI_PROCESS ───┘
+                         ↑
+                    same users table
+                         ↑
+                     Mini App
+```
+
+- There is exactly one production `DATABASE_URL` for the application.
+- The Mini App frontend never receives database credentials.
+- FastAPI resolves the authenticated Telegram user against the same `users` table used by the bot.
+- Schema changes are applied once by Alembic; Bot and API use the same migration head.
+- Connection pooling is configured in `app/db/engine.py`; API routes do not create their own database engine.
+- `app/db/health.py` validates the same database and required tables used by the runtime.
+- Production startup requires `DATABASE_URL` and PostgreSQL.
+
+## 8. Deployment model
 
 ### GitHub
 Source of truth for application code, migrations, tests, CI/CD, and release metadata.
@@ -114,7 +136,7 @@ The current lightweight Pterodactyl setup may keep `main.py`, `.env`, and `requi
 ### Vercel
 Hosts the Mini App frontend. It consumes the FastAPI API.
 
-## 8. Rules
+## 9. Rules
 
 1. No business logic in Telegram handlers.
 2. No database queries directly from Telegram handlers or API routes.
@@ -125,7 +147,7 @@ Hosts the Mini App frontend. It consumes the FastAPI API.
 7. A checklist item becomes green only after implementation and verification.
 8. Production code must remain compatible with Python 3.12.
 
-## 9. Current implementation boundary
+## 10. Current implementation boundary
 
 The repository currently uses main.py as the composition root and keeps Telegram feature routers under app/bot/. Business logic is concentrated in app/services/, persistence primitives in app/db/, and migrations in migrations/.
 
