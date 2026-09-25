@@ -41,7 +41,8 @@ if origins:
         allow_origins=origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Telegram-Init-Data"],
+        allow_headers=["Authorization", "Content-Type", "X-Telegram-Init-Data", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
     )
 
 
