@@ -407,9 +407,6 @@ async def pvp_callback(message: Message, action: str) -> None:
         await message.answer(errors.get(str(exc), "⚠️ Действие недоступно."))
 
 
-@dp.message(Command("pvp"))
-async def pvp_handler(message: Message) -> None:
-    await show_pvp_category(message)
 
 
 async def start_mini_game(message: Message, kind: str) -> None:
