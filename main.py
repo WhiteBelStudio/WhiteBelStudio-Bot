@@ -191,6 +191,20 @@ async def show_help_category(message: Message, category: str) -> None:
         return
     await message.edit_text(content, reply_markup=help_back_keyboard())
 
+@dp.callback_query(F.data == "help_categories")
+async def help_categories_callback(callback: CallbackQuery) -> None:
+    if callback.message is not None:
+        await show_help_categories(callback.message, edit=True)
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("help_category:"))
+async def help_category_callback(callback: CallbackQuery) -> None:
+    category = (callback.data or "").split(":", 1)[1]
+    if callback.message is not None:
+        await show_help_category(callback.message, category)
+    await callback.answer()
+
 
 @dp.message(Command("help"))
 async def help_handler(message: Message) -> None:
@@ -285,8 +299,6 @@ async def setup_bot_commands(bot: Bot) -> None:
             BotCommand(command="rep", description="Моя репутация"),
             BotCommand(command="toprep", description="Топ репутации"),
             BotCommand(command="rules", description="Правила сообщества"),
-            BotCommand(command="find", description="Найти участника"),
-            BotCommand(command="friends", description="Друзья"),
         ],
         scope=BotCommandScopeDefault(),
     )
