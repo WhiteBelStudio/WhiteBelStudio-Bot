@@ -146,17 +146,6 @@ def start_game(user_id: int, kind: str) -> MiniGame:
         words = ["алгоритм", "модератор", "сервер", "репутация", "игрок", "космос", "маршрут", "телеграм"]
         word = random.choice(words)
         game = MiniGame("chain", f"🔤 <b>Словесная цепочка!</b>\n\nНачальное слово: <b>{word}</b>\n\nНапиши слово, которое начинается с буквы <b>{word[-1].upper()}</b>.", "", 1, datetime.utcnow(), {"difficulty": "normal", "required_first": word[-1]})
-    elif kind == "memory":
-        length = random.randint(5, 8)
-        sequence = "".join(str(random.randint(0, 9)) for _ in range(length))
-        game = MiniGame(
-            "memory",
-            f"Запомни последовательность и введи её через 3 секунды: <b>{sequence}</b>",
-            sequence,
-            1,
-            datetime.utcnow(),
-            {"difficulty": "expert", "length": length},
-        )
     else:
         raise ValueError("unknown mini-game")
     SESSIONS[user_id] = game
@@ -214,7 +203,7 @@ def game_catalog_text() -> str:
         "🧠 <b>Математический штурм</b> — 3 попытки, сложность Normal/Hard/Expert.\n"
         "🔐 <b>Взломщик</b> — угадай 4-значный код за 6 попыток по подсказкам.\n"
         "🔤 <b>Шифровальщик</b> — восстанови перемешанное слово за 3 попытки.\n"
-        "🧠 <b>Память</b> — запомни последовательность из 5–8 цифр.\n"
+
         "🔢 <b>Последовательность</b> — восстанови скрытую закономерность.\n"
         "🧩 <b>Логика</b> — реши задачу на закономерность за 2 попытки.\n"
         "🔀 <b>Анаграмма PRO</b> — восстанови сложное слово за 2 попытки.\n"
