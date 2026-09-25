@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app.db.health import check_database_schema
+
 
 ROOT = Path(__file__).resolve().parent
 REPO = os.getenv("GITHUB_REPOSITORY", "WhiteBelStudio/WhiteBelStudio-Bot")
@@ -150,6 +152,10 @@ def main() -> None:
         health_check()
         run_migrations()
         health_check()
+        log("Checking migrated database schema")
+        import asyncio
+        revision = asyncio.run(check_database_schema())
+        log(f"Database schema: OK ({revision})")
         log(f"Bootstrap ready at {updated_commit[:12]}")
     except Exception as exc:
         log(f"Bootstrap failed: {exc}")
