@@ -53,8 +53,7 @@ async def test_readiness_requires_database() -> None:
 @pytest.mark.asyncio
 async def test_readiness_returns_migration_revision() -> None:
     with (
-        patch("app.api.app.check_database_connection", new=AsyncMock()),
-        patch("app.api.app.check_database_schema", new=AsyncMock(return_value="0015")),
+        patch("app.api.app.check_readiness", new=AsyncMock(return_value="0015")),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app),
