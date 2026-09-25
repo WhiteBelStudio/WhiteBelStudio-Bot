@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from fastapi import Header, HTTPException
+from collections.abc import AsyncIterator
+
+from app.db.engine import get_session
 
 from app.db.models import User
 from app.services.security import (
     TelegramInitDataError,
     authenticate_telegram_init_data,
 )
+
+
+async def get_database_session() -> AsyncIterator:
+    async for session in get_session():
+        yield session
 
 
 async def get_current_telegram_user(
