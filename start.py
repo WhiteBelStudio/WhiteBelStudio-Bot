@@ -148,11 +148,13 @@ def main() -> None:
 
     previous_commit = ""
     updated_commit = ""
+    migration_started = False
 
     try:
         previous_commit, updated_commit = update_from_github()
         install_dependencies()
         health_check()
+        migration_started = True
         run_migrations()
         health_check()
         log("Checking migrated database schema")
@@ -161,8 +163,11 @@ def main() -> None:
         log(f"Bootstrap ready at {updated_commit[:12]}")
     except Exception as exc:
         log(f"Bootstrap failed: {exc}")
-        if previous_commit and updated_commit and previous_commit != updated_commit:
+        # Never roll code back after migrations have started: the database may already contain the new schema.
+        if (not migration_started) and previous_commit and updated_commit and previous_commit != updated_commit:
             rollback_code(previous_commit)
+        elif migration_started:
+            log("Code rollback skipped because database migration had started")
         raise
 
     start_bot()
