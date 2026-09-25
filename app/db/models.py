@@ -69,7 +69,7 @@ class ReputationRating(Base):
     __tablename__ = "reputation_ratings"
     __table_args__ = (
         UniqueConstraint("rater_id", "rated_id", name="uq_reputation_rating_pair"),
-        CheckConstraint("score BETWEEN 1 AND 5", name="ck_reputation_rating_score"),
+        CheckConstraint("score BETWEEN 1 AND 5", name="ck_reputation_score_range"),
         CheckConstraint("rater_id <> rated_id", name="ck_reputation_rating_not_self"),
     )
 
@@ -115,7 +115,7 @@ class CommunityReputationVote(Base):
     __tablename__ = "community_reputation_votes"
     __table_args__ = (
         UniqueConstraint("chat_id", "rater_id", "rated_id", name="uq_community_rep_vote"),
-        CheckConstraint("score IN (-1, 1)", name="ck_community_rep_vote_score"),
+        CheckConstraint("score IN (-1, 1)", name="ck_community_reputation_votes_score"),
         CheckConstraint("rater_id <> rated_id", name="ck_community_rep_vote_not_self"),
     )
 
