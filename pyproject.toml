@@ -5,3 +5,4 @@ target-version = "py312"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = ["integration: tests requiring a real PostgreSQL database"]
