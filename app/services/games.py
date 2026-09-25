@@ -54,7 +54,6 @@ async def get_or_create_game_profile(
 
 
 def to_game_profile_view(profile: GameProfile) -> GameProfileView:
-    level_start = experience_for_level(profile.level)
     next_level = experience_for_level(profile.level + 1)
     return GameProfileView(
         user_id=profile.user_id,
