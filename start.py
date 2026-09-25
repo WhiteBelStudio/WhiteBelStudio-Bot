@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
@@ -33,6 +34,8 @@ def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def check_environment() -> None:
     required = ("BOT_TOKEN",)
+    if os.getenv("APP_ENV", "production").lower() == "production":
+        required += ("DATABASE_URL",)
     missing = [name for name in required if not os.getenv(name)]
     if missing:
         raise RuntimeError("Missing required environment variables: " + ", ".join(missing))
@@ -153,7 +156,6 @@ def main() -> None:
         run_migrations()
         health_check()
         log("Checking migrated database schema")
-        import asyncio
         revision = asyncio.run(check_database_schema())
         log(f"Database schema: OK ({revision})")
         log(f"Bootstrap ready at {updated_commit[:12]}")
