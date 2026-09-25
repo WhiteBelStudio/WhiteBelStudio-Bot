@@ -23,7 +23,11 @@ class UserMeResponse(BaseModel):
     updated_at: datetime
 
 
-class EconomyResponse(BaseModel):
+class ORMResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EconomyResponse(ORMResponse):
     balance: Decimal
     daily_streak: int
     last_daily_claim_at: datetime | None
@@ -31,7 +35,7 @@ class EconomyResponse(BaseModel):
     lifetime_spent: Decimal
 
 
-class TransactionResponse(BaseModel):
+class TransactionResponse(ORMResponse):
     id: int
     amount: Decimal
     balance_after: Decimal
@@ -75,7 +79,7 @@ class AchievementProgressResponse(BaseModel):
     target: int
 
 
-class ShopItemResponse(BaseModel):
+class ShopItemResponse(ORMResponse):
     id: int
     code: str
     name: str
