@@ -291,12 +291,23 @@ async def start_mini_game(message: Message, kind: str) -> None:
         return
     try:
         game = start_game(message.from_user.id, kind)
-        await message.answer(
+        sent = await message.answer(
             f"🎮 <b>Игра началась!</b>\n\n{game.prompt}\n\n"
             f"🎯 Попыток: <b>{game.attempts_left}</b>\n"
             "Отправь ответ обычным сообщением.",
             reply_markup=mini_back_keyboard(),
         )
+        if game.kind == "memory":
+            import asyncio
+            await asyncio.sleep(3)
+            try:
+                await sent.edit_text(
+                    "🧠 <b>Память!</b>\n\n"
+                    "Последовательность скрыта. Теперь введи её целиком.",
+                    reply_markup=mini_back_keyboard(),
+                )
+            except Exception:
+                pass
     except ValueError:
         await message.answer("⚠️ Такая игра пока недоступна.")
 
