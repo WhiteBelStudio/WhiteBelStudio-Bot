@@ -26,17 +26,13 @@ from app.db.health import check_database_connection
 from app.bot.middleware import ChatReputationMiddleware
 from app.bot.economy import router as economy_router
 from app.bot.achievements import router as achievements_router
+from app.bot.games import router as games_router
 from app.services.community import (
     format_community_reputation,
     get_reputation_history,
     get_reputation_score,
     get_reputation_top,
 )
-from app.services.games import get_game_leaderboard, get_game_profile, record_game_result
-from app.services.economy import award_game_coins
-from app.services.achievements import check_and_unlock_achievements
-from app.services.minigames import cancel_game, check_answer, game_catalog_text, get_game, start_game
-from app.services.pvp import PVP_KINDS, accept_challenge, create_challenge, decline_challenge, get_active_match, get_display_name, submit_answer
 from app.services.social import (
     find_users,
     format_social_user,
@@ -56,6 +52,7 @@ dp = Dispatcher()
 dp.message.middleware(ChatReputationMiddleware())
 dp.include_router(economy_router)
 dp.include_router(achievements_router)
+dp.include_router(games_router)
 
 
 
@@ -86,6 +83,10 @@ async def start_handler(message: Message) -> None:
                 InlineKeyboardButton(text="🛒 Магазин", callback_data="shop"),
                 InlineKeyboardButton(text="❓ Помощь", callback_data="menu_help"),
             ],
+            [
+                InlineKeyboardButton(text="⚔️ PvP", callback_data="games:pvp"),
+                InlineKeyboardButton(text="🎮 Мини-игры", callback_data="games:mini"),
+            ],
         ]
     )
 
@@ -103,31 +104,18 @@ async def start_handler(message: Message) -> None:
     )
 
 
-@dp.callback_query(
-    F.data.in_({
-        "menu_profile",
-        "menu_reputation",
-        "menu_rules",
-        "shop",
-        "menu_help",
-        "help_categories",
-        "mini_games",
-        "mini_games:regular",
-        "mini_games:pvp",
-    })
-    | F.data.startswith("help_category:")
-    | F.data.startswith("pvp_create:")
-    | F.data.startswith("pvp_accept:")
-    | F.data.startswith("pvp_decline:")
-    | F.data.startswith("mini_start:")
-)
+@dp.callback_query(F.data.in_({
+    "menu_profile",
+    "menu_reputation",
+    "menu_rules",
+    "shop",
+    "menu_help",
+}))
 async def menu_callback_handler(callback: CallbackQuery) -> None:
     if callback.message is None:
         await callback.answer()
         return
-
     action = callback.data or ""
-
     if action == "menu_profile":
         await profile_handler(callback.message)
     elif action == "menu_reputation":
@@ -139,23 +127,6 @@ async def menu_callback_handler(callback: CallbackQuery) -> None:
         await show_shop(callback.message, edit=True)
     elif action == "menu_help":
         await show_help_categories(callback.message, edit=True)
-    elif action == "help_categories":
-        await show_help_categories(callback.message, edit=True)
-    elif action.startswith("help_category:"):
-        await show_help_category(callback.message, action.split(":", 1)[1])
-    elif action == "mini_games":
-        await show_mini_games(callback.message, edit=True)
-    elif action == "mini_games:regular":
-        await callback.message.edit_text("🎮 <b>Обычные мини-игры</b>\\n\\nВыбери игру:", reply_markup=regular_games_keyboard())
-    elif action == "mini_games:pvp":
-        await show_pvp_category(callback.message, edit=True)
-    elif action.startswith("pvp_create:"):
-        await send_pvp_challenge(callback.message, action.split(":", 1)[1])
-    elif action.startswith("pvp_accept:") or action.startswith("pvp_decline:"):
-        await pvp_callback(callback.message, action)
-    elif action.startswith("mini_start:"):
-        await start_mini_game(callback.message, action.split(":", 1)[1])
-
     await callback.answer()
 
 
@@ -294,345 +265,6 @@ async def top_rep_handler(message: Message) -> None:
         print(f"[reputation] top failed: {exc}", flush=True)
         await message.answer("⚠️ Не удалось загрузить топ.")
 
-
-
-def mini_games_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🎮 Обычные игры", callback_data="mini_games:regular"),
-                InlineKeyboardButton(text="⚔️ Соревнования", callback_data="mini_games:pvp"),
-            ],
-        ]
-    )
-
-
-def regular_games_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🧮 Штурм", callback_data="mini_start:math"), InlineKeyboardButton(text="🔐 Взломщик", callback_data="mini_start:code")],
-            [InlineKeyboardButton(text="🔤 Шифровальщик", callback_data="mini_start:word")],
-            [InlineKeyboardButton(text="🔢 Последовательность", callback_data="mini_start:sequence"), InlineKeyboardButton(text="🧩 Логика", callback_data="mini_start:logic")],
-            [InlineKeyboardButton(text="🔀 Анаграмма PRO", callback_data="mini_start:anagram")],
-            [InlineKeyboardButton(text="🧱 Башня", callback_data="mini_start:tower"), InlineKeyboardButton(text="🧪 Алгоритм", callback_data="mini_start:algorithm")],
-            [InlineKeyboardButton(text="🧮 Счётчик", callback_data="mini_start:counter"), InlineKeyboardButton(text="🌌 Космический маршрут", callback_data="mini_start:space")],
-            [InlineKeyboardButton(text="🏆 Викторина", callback_data="mini_start:quiz"), InlineKeyboardButton(text="🔤 Словесная цепочка", callback_data="mini_start:chain")],
-            [InlineKeyboardButton(text="⬅️ К категориям", callback_data="mini_games")],
-        ]
-    )
-
-
-def pvp_games_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🧮 Математика", callback_data="pvp_create:math")],
-            [InlineKeyboardButton(text="🔢 Последовательность", callback_data="pvp_create:sequence")],
-            [InlineKeyboardButton(text="🏆 Викторина", callback_data="pvp_create:quiz")],
-            [InlineKeyboardButton(text="⬅️ К категориям", callback_data="mini_games")],
-        ]
-    )
-
-
-def pvp_challenge_keyboard(match_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[
-            InlineKeyboardButton(text="⚔️ Принять вызов", callback_data=f"pvp_accept:{match_id}"),
-            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"pvp_decline:{match_id}"),
-        ]]
-    )
-
-
-def mini_back_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🕹 Все мини-игры", callback_data="mini_games")]
-        ]
-    )
-
-
-async def show_mini_games(message: Message, *, edit: bool = False) -> None:
-    text = game_catalog_text()
-    keyboard = mini_games_keyboard()
-    if edit:
-        await message.edit_text(text, reply_markup=keyboard)
-    else:
-        await message.answer(text, reply_markup=keyboard)
-
-
-async def show_pvp_category(message: Message, *, edit: bool = False) -> None:
-    text = (
-        "⚔️ <b>Соревнования</b>\\n\\n"
-        "Выбери игру для вызова. Оба участника решают одну и ту же задачу.\\n"
-        "⏱ Вызов действует 5 минут.\\n"
-        "🏆 Победа определяется по правильному ответу.\\n"
-        "🪙 Ставок монет нет — только навык и XP."
-    )
-    keyboard = pvp_games_keyboard()
-    if edit:
-        await message.edit_text(text, reply_markup=keyboard)
-    else:
-        await message.answer(text, reply_markup=keyboard)
-
-
-async def send_pvp_challenge(message: Message, kind: str) -> None:
-    if message.from_user is None:
-        return
-    try:
-        async for session in get_session():
-            user, _ = await sync_telegram_user(session, message.from_user)
-            match = await create_challenge(session, user.id, kind)
-            creator_name = f"@{user.username}" if user.username else user.first_name
-    except ValueError as exc:
-        msg = "⚠️ У тебя уже есть активное соревнование." if str(exc) == "active_match" else "⚠️ Не удалось создать вызов."
-        await message.answer(msg)
-        return
-    await message.answer(
-        f"⚔️ <b>Вызов на соревнование!</b>\\n\\n"
-        f"👤 От: <b>{creator_name}</b>\\n"
-        f"🎮 Игра: <b>{PVP_KINDS[kind]}</b>\\n\\n"
-        f"Задача: {match.prompt}\\n\\n"
-        "Нажми «Принять вызов», чтобы начать."
-        ,
-        reply_markup=pvp_challenge_keyboard(match.id),
-    )
-
-
-async def pvp_callback(message: Message, action: str) -> None:
-    if message.from_user is None:
-        return
-    try:
-        match_id = int(action.split(":", 1)[1])
-    except (ValueError, IndexError):
-        await message.answer("⚠️ Некорректный вызов.")
-        return
-    try:
-        async for session in get_session():
-            user, _ = await sync_telegram_user(session, message.from_user)
-            if action.startswith("pvp_accept:"):
-                match = await accept_challenge(session, match_id, user.id)
-                await message.answer(
-                    f"⚔️ <b>Соревнование началось!</b>\\n\\n"
-                    f"🎮 {PVP_KINDS[match.kind]}\\n"
-                    f"{match.prompt}\\n\\n"
-                    "Отправь ответ обычным сообщением."
-                )
-                return
-            await decline_challenge(session, match_id, user.id)
-            await message.answer("❌ Вызов отклонён.")
-    except ValueError as exc:
-        errors = {
-            "self": "⚠️ Нельзя вызвать самого себя.",
-            "active_match": "⚠️ У тебя уже есть активное соревнование.",
-            "creator": "⚠️ Создатель вызова не может отклонить его.",
-            "unavailable": "⚠️ Этот вызов уже недоступен.",
-        }
-        await message.answer(errors.get(str(exc), "⚠️ Действие недоступно."))
-
-
-
-
-async def start_mini_game(message: Message, kind: str) -> None:
-    if message.from_user is None:
-        return
-    if get_game(message.from_user.id) is not None:
-        await message.answer("⚠️ У тебя уже есть активная игра. Закончи её или отправь /cancelgame.")
-        return
-    try:
-        game = start_game(message.from_user.id, kind)
-        sent = await message.answer(
-            f"🎮 <b>Игра началась!</b>\n\n{game.prompt}\n\n"
-            f"🎯 Попыток: <b>{game.attempts_left}</b>\n"
-            "Отправь ответ обычным сообщением.",
-            reply_markup=mini_back_keyboard(),
-        )
-    except ValueError:
-        await message.answer("⚠️ Такая игра пока недоступна.")
-
-
-@dp.message(Command("games"))
-async def mini_games_handler(message: Message) -> None:
-    await show_mini_games(message)
-
-
-@dp.message(Command("cancelgame"))
-async def cancel_game_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-    if get_game(message.from_user.id) is None:
-        await message.answer("ℹ️ Активной игры нет.")
-        return
-    cancel_game(message.from_user.id)
-    await message.answer("🛑 Игра отменена.")
-
-
-@dp.message()
-async def mini_game_answer_handler(message: Message) -> None:
-    if message.from_user is None or not (message.text or "").strip():
-        return
-    if (message.text or "").startswith("/"):
-        return
-    try:
-        async for session in get_session():
-            user, _ = await sync_telegram_user(session, message.from_user)
-            pvp_match = await get_active_match(session, user.id)
-            if pvp_match and pvp_match.status == "active":
-                status, match = await submit_answer(session, pvp_match.id, user.id, message.text or "")
-                if status == "correct":
-                    await message.answer("✅ Ответ принят. Ждём соперника.")
-                elif status == "wrong":
-                    await message.answer("❌ Ответ неверный. Ждём соперника.")
-                elif status == "already":
-                    await message.answer("ℹ️ Ты уже ответил в этом соревновании.")
-                elif status == "finished":
-                    if match.status == "draw":
-                        await record_game_result(session, user.id, result="draw", experience=20)
-                        await check_and_unlock_achievements(session, user.id)
-                        coins = await award_game_coins(session, user.id, game_kind="pvp", result="draw")
-                        other_id = match.opponent_id if match.creator_id == user.id else match.creator_id
-                        if other_id is not None:
-                            await record_game_result(session, other_id, result="draw", experience=20)
-                            await check_and_unlock_achievements(session, other_id)
-                            await award_game_coins(session, other_id, game_kind="pvp", result="draw")
-                        await message.answer(
-                            f"🤝 <b>Ничья!</b> Оба игрока ответили одинаково.\\n"
-                            f"✨ +20 XP\\n🪙 +{coins:.1f} монет"
-                        )
-                    else:
-                        winner = await get_display_name(session, match.winner_id)
-                        if match.winner_id == user.id:
-                            await record_game_result(session, user.id, result="win", experience=50)
-                            await check_and_unlock_achievements(session, user.id)
-                            coins = await award_game_coins(session, user.id, game_kind="pvp", result="win")
-                            await message.answer(
-                                f"🏆 <b>Ты победил!</b>\\n✨ +50 XP\\n🪙 +{coins:.1f} монет"
-                            )
-                            loser_id = match.opponent_id if match.creator_id == user.id else match.creator_id
-                            if loser_id is not None:
-                                await record_game_result(session, loser_id, result="loss", experience=10)
-                                await check_and_unlock_achievements(session, loser_id)
-                                await award_game_coins(session, loser_id, game_kind="pvp", result="loss")
-                        else:
-                            await message.answer(f"🏁 <b>Соревнование завершено.</b>\\nПобедитель: {winner}")
-                            await record_game_result(session, user.id, result="loss", experience=10)
-                            await check_and_unlock_achievements(session, user.id)
-                            coins = await award_game_coins(session, user.id, game_kind="pvp", result="loss")
-                            await message.answer(f"🪙 Награда за участие: +{coins:.1f} монет")
-                elif status == "expired":
-                    await message.answer("⏱ Соревнование истекло.")
-                return
-    except Exception as exc:
-        print(f"[pvp] answer failed: {exc}", flush=True)
-
-    game = get_game(message.from_user.id)
-    if game is None:
-        return
-
-    status, finished_game, data = check_answer(message.from_user.id, message.text or "")
-    if status == "invalid":
-        await message.answer("❌ Некорректный формат ответа. Попробуй ещё раз.")
-        return
-    if status == "tower_progress":
-        await message.answer(
-            f"✅ Этаж {data['floor'] - 1} пройден!\n\n"
-            f"{data['prompt']}\n\n"
-            "🎯 Попыток на этаж: <b>2</b>",
-            reply_markup=mini_back_keyboard(),
-        )
-        return
-
-    if status in {"progress", "wrong"}:
-        if status == "progress" and game.kind == "code":
-            await message.answer(
-                f"🔎 Точных совпадений: <b>{data['exact']}</b>\n"
-                f"🟡 Частичных совпадений: <b>{data['partial']}</b>\n"
-                f"🎯 Осталось попыток: <b>{data['attempts_left']}</b>"
-            )
-        else:
-            await message.answer(f"❌ Неверно. Осталось попыток: <b>{data['attempts_left']}</b>")
-        return
-
-    if status == "win":
-        xp = {"math": 40, "code": 65, "word": 50, "sequence": 70, "logic": 80, "anagram": 85, "tower": 90, "algorithm": 100, "counter": 80, "space": 95, "quiz": 60, "chain": 55}.get(finished_game.kind, 40)
-        try:
-            async for session in get_session():
-                await record_game_result(session, message.from_user.id, result="win", experience=xp)
-                await check_and_unlock_achievements(session, message.from_user.id)
-                coins = await award_game_coins(
-                    session, message.from_user.id, game_kind=finished_game.kind, result="win"
-                )
-        except Exception as exc:
-            coins = 0
-            print(f"[minigame] win save failed: {exc}", flush=True)
-        await message.answer(
-            f"🏆 <b>Победа!</b>\n✨ +{xp} XP"
-            + (f"\n🧱 Башня пройдена: <b>{data.get('floors', 0)}/5 этажей</b>" if finished_game.kind == "tower" else "")
-            + "\n\nСыграй ещё раз и попробуй улучшить результат.",
-            reply_markup=mini_games_keyboard(),
-        )
-        return
-
-    if status == "loss":
-        answer = data.get("answer", "неизвестен")
-        try:
-            async for session in get_session():
-                await record_game_result(session, message.from_user.id, result="loss", experience=10)
-                await check_and_unlock_achievements(session, message.from_user.id)
-                coins = await award_game_coins(
-                    session, message.from_user.id, game_kind=finished_game.kind, result="loss"
-                )
-        except Exception as exc:
-            coins = 0
-            print(f"[minigame] loss save failed: {exc}", flush=True)
-        await message.answer(
-            f"💥 <b>Игра окончена.</b>\nПравильный ответ: <b>{answer}</b>\n"
-            f"✨ +10 XP за попытку.\\n🪙 +{coins:.1f} монет.",
-            reply_markup=mini_games_keyboard(),
-        )
-
-
-@dp.message(Command("game"))
-async def game_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    try:
-        async for session in get_session():
-            user, _ = await sync_telegram_user(session, message.from_user)
-            profile = await get_game_profile(session, user.id)
-
-        await message.answer(
-            "🎮 <b>Игровой профиль</b>\n\n"
-            f"👤 {user.first_name}\n"
-            f"⭐ Уровень: <b>{profile.level}</b>\n"
-            f"✨ Опыт: <b>{profile.experience}</b>\n"
-            f"📈 До следующего уровня: <b>{profile.experience_to_next}</b>\n\n"
-            f"🎯 Игр: <b>{profile.games_played}</b>\n"
-            f"🏆 Побед: <b>{profile.wins}</b>\n"
-            f"💠 Поражений: <b>{profile.losses}</b>\n"
-            f"🤝 Ничьих: <b>{profile.draws}</b>"
-        )
-    except Exception as exc:
-        print(f"[game] profile failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось загрузить игровой профиль.")
-
-
-@dp.message(Command("gametop"))
-async def game_top_handler(message: Message) -> None:
-    try:
-        async for session in get_session():
-            rows = await get_game_leaderboard(session, 10)
-
-        if not rows:
-            await message.answer("🎮 Пока никто не играл.")
-            return
-
-        lines = ["🏆 <b>Топ игроков</b>", ""]
-        for index, (_, name, level, experience) in enumerate(rows, 1):
-            lines.append(f"{index}. {name} — ур. <b>{level}</b> · {experience} XP")
-        await message.answer("\n".join(lines))
-    except Exception as exc:
-        print(f"[game] leaderboard failed: {exc}", flush=True)
-        await message.answer("⚠️ Не удалось загрузить топ игроков.")
 
 
 @dp.message(Command("profile"))
