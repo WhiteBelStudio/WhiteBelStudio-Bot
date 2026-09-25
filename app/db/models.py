@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -171,3 +172,53 @@ class GameProfile(Base):
     draws: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class EconomyAccount(Base):
+    __tablename__ = "economy_accounts"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_economy_account_user"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    balance: Mapped[Decimal] = mapped_column(Numeric(12, 1), default=Decimal("0.0"), nullable=False)
+    daily_streak: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_daily_claim_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lifetime_earned: Mapped[Decimal] = mapped_column(Numeric(14, 1), default=Decimal("0.0"), nullable=False)
+    lifetime_spent: Mapped[Decimal] = mapped_column(Numeric(14, 1), default=Decimal("0.0"), nullable=False)
+
+
+class ShopItem(Base):
+    __tablename__ = "shop_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 1), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class UserInventory(Base):
+    __tablename__ = "user_inventory"
+    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_inventory_user_item"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("shop_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class CoinTransaction(Base):
+    __tablename__ = "coin_transactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 1), nullable=False)
+    balance_after: Mapped[Decimal] = mapped_column(Numeric(12, 1), nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    reference_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("shop_items.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
