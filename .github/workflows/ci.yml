@@ -18,11 +18,25 @@ jobs:
     name: Python 3.12 • Ruff + Compile + Tests + Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: whitebelstudio_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d whitebelstudio_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       PYTHONUNBUFFERED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
       BOT_TOKEN: "000000000:ci-test-token"
-      DATABASE_URL: "sqlite+aiosqlite:///./ci.db"
+      DATABASE_URL: "postgresql+asyncpg://ci:ci@127.0.0.1:5432/whitebelstudio_ci"
       APP_ENV: "test"
 
     steps:
@@ -50,7 +64,7 @@ jobs:
         run: python -m compileall -q app main.py start.py tests
 
       - name: Tests
-        run: python -m pytest -q --disable-warnings --maxfail=1
+        run: python -m pytest -q -m "not integration" --disable-warnings --maxfail=1
 
       - name: Smoke import
         run: python -c "import main; print('imports: OK')"
@@ -64,12 +78,14 @@ jobs:
       - name: Database integrity tests
         run: python -m pytest -q tests/test_database_models.py --disable-warnings
 
+      - name: PostgreSQL integration tests
+        run: python -m pytest -q -m integration --disable-warnings
+
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: ci-diagnostics-${{ github.run_id }}
           path: |
-            ci.db
             *.log
           if-no-files-found: ignore
