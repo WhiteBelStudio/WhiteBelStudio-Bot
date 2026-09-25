@@ -74,7 +74,9 @@ def configure_engine() -> AsyncEngine:
         if database_url.startswith("postgresql+asyncpg://"):
             engine_kwargs["pool_size"] = int(os.getenv("DB_POOL_SIZE", "5"))
             engine_kwargs["max_overflow"] = int(os.getenv("DB_MAX_OVERFLOW", "10"))
-            engine_kwargs["connect_args"] = {"timeout": float(os.getenv("DB_CONNECT_TIMEOUT", "10"))}
+            engine_kwargs["connect_args"] = {
+                "timeout": float(os.getenv("DB_CONNECT_TIMEOUT", "10"))
+            }
 
         engine = create_async_engine(database_url, **engine_kwargs)
         _session_factory = async_sessionmaker(
@@ -96,6 +98,10 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 
 async def init_db() -> None:
+    """Initialize a development/test schema without bypassing production migrations."""
+    if os.getenv("APP_ENV", "production").lower() == "production":
+        raise RuntimeError("init_db() is disabled in production; use Alembic migrations")
+
     db_engine = configure_engine()
 
     from app.db.models import Base
