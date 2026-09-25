@@ -47,11 +47,22 @@ def items_keyboard(items) -> InlineKeyboardMarkup:
 async def show_shop(message: Message, category: str | None = None, *, edit: bool = False) -> None:
     if message.from_user is None:
         return
-    async for session in get_session():
-        user, _ = await sync_telegram_user(session, message.from_user)
-        await ensure_shop_catalog(session)
-        balance = await get_balance(session, user.id)
-        items = await list_shop_items(session, category)
+    try:
+        async for session in get_session():
+            user, _ = await sync_telegram_user(session, message.from_user)
+            await ensure_shop_catalog(session)
+            balance = await get_balance(session, user.id)
+            items = await list_shop_items(session, category)
+    except Exception as exc:
+        print(f"[economy] shop load failed: {exc}", flush=True)
+        if edit:
+            try:
+                await message.edit_text("⚠️ Магазин временно недоступен. Попробуй ещё раз.")
+            except Exception:
+                pass
+        else:
+            await message.answer("⚠️ Магазин временно недоступен. Попробуй ещё раз.")
+        return
 
     if category and category not in CATEGORY_NAMES:
         category = None
@@ -81,10 +92,14 @@ async def show_shop(message: Message, category: str | None = None, *, edit: bool
 async def balance_handler(message: Message) -> None:
     if message.from_user is None:
         return
-    async for session in get_session():
-        user, _ = await sync_telegram_user(session, message.from_user)
-        balance = await get_balance(session, user.id)
-    await message.answer(f"🪙 <b>Твой баланс: {balance:.1f}</b>")
+    try:
+        async for session in get_session():
+            user, _ = await sync_telegram_user(session, message.from_user)
+            balance = await get_balance(session, user.id)
+        await message.answer(f"🪙 <b>Твой баланс: {balance:.1f}</b>")
+    except Exception as exc:
+        print(f"[economy] balance failed: {exc}", flush=True)
+        await message.answer("⚠️ Не удалось загрузить баланс.")
 
 
 @router.message(Command("daily"))
@@ -151,17 +166,31 @@ async def coin_history_handler(message: Message) -> None:
 
 @router.callback_query(F.data == "shop")
 async def shop_callback(callback: CallbackQuery) -> None:
-    if callback.message is not None:
-        await show_shop(callback.message, edit=True)
-    await callback.answer()
+    try:
+        if callback.message is not None:
+            await show_shop(callback.message, edit=True)
+        await callback.answer()
+    except Exception as exc:
+        print(f"[economy] shop callback failed: {exc}", flush=True)
+        try:
+            await callback.answer("⚠️ Магазин временно недоступен.", show_alert=True)
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data.startswith("shop_cat:"))
 async def shop_category_callback(callback: CallbackQuery) -> None:
-    if callback.message is not None:
-        category = (callback.data or "").split(":", 1)[1]
-        await show_shop(callback.message, category, edit=True)
-    await callback.answer()
+    try:
+        if callback.message is not None:
+            category = (callback.data or "").split(":", 1)[1]
+            await show_shop(callback.message, category, edit=True)
+        await callback.answer()
+    except Exception as exc:
+        print(f"[economy] category callback failed: {exc}", flush=True)
+        try:
+            await callback.answer("⚠️ Не удалось открыть категорию.", show_alert=True)
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data == "shop_inventory")
