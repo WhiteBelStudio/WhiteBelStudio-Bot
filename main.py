@@ -188,14 +188,14 @@ async def game_handler(message: Message) -> None:
             profile = await get_game_profile(session, user.id)
 
         await message.answer(
-            "🎮 <b>Игровой профиль</b>\\n\\n"
-            f"👤 {user.first_name}\\n"
-            f"⭐ Уровень: <b>{profile.level}</b>\\n"
-            f"✨ Опыт: <b>{profile.experience}</b>\\n"
-            f"📈 До следующего уровня: <b>{profile.experience_to_next}</b>\\n\\n"
-            f"🎯 Игр: <b>{profile.games_played}</b>\\n"
-            f"🏆 Побед: <b>{profile.wins}</b>\\n"
-            f"💠 Поражений: <b>{profile.losses}</b>\\n"
+            "🎮 <b>Игровой профиль</b>\n\n"
+            f"👤 {user.first_name}\n"
+            f"⭐ Уровень: <b>{profile.level}</b>\n"
+            f"✨ Опыт: <b>{profile.experience}</b>\n"
+            f"📈 До следующего уровня: <b>{profile.experience_to_next}</b>\n\n"
+            f"🎯 Игр: <b>{profile.games_played}</b>\n"
+            f"🏆 Побед: <b>{profile.wins}</b>\n"
+            f"💠 Поражений: <b>{profile.losses}</b>\n"
             f"🤝 Ничьих: <b>{profile.draws}</b>"
         )
     except Exception as exc:
@@ -216,7 +216,7 @@ async def game_top_handler(message: Message) -> None:
         lines = ["🏆 <b>Топ игроков</b>", ""]
         for index, (_, name, level, experience) in enumerate(rows, 1):
             lines.append(f"{index}. {name} — ур. <b>{level}</b> · {experience} XP")
-        await message.answer("\\n".join(lines))
+        await message.answer("\n".join(lines))
     except Exception as exc:
         print(f"[game] leaderboard failed: {exc}", flush=True)
         await message.answer("⚠️ Не удалось загрузить топ игроков.")
