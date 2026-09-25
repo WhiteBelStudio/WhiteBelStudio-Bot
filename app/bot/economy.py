@@ -235,11 +235,8 @@ async def gift_handler(message: Message) -> None:
                 raise ValueError("recipient_not_found")
             item, new_balance = await gift_item(session, sender.id, recipient.id, item_id)
         await message.answer(
-            f"🎁 <b>Подарок отправлен!</b>
-
-"
-            f"{item.name} → @{recipient.username or recipient.first_name}
-"
+            f"🎁 <b>Подарок отправлен!</b>\n\n"
+            f"{item.name} → @{recipient.username or recipient.first_name}\n"
             f"🪙 Остаток: <b>{new_balance:.1f}</b>"
         )
     except ValueError as exc:
