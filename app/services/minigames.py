@@ -108,6 +108,44 @@ def start_game(user_id: int, kind: str) -> MiniGame:
             datetime.utcnow(),
             {"difficulty": "expert"},
         )
+    elif kind == "tower":
+        target = random.randint(4, 8)
+        answer = str(target)
+        game = MiniGame("tower", f"🧱 <b>Башня!</b>\n\nТекущий этаж: 1\nСколько правильных ответов подряд нужно для следующего подъёма?\n\nЦель: <b>{target}</b>", answer, 3, datetime.utcnow(), {"difficulty": "hard", "target": target, "floor": 1})
+    elif kind == "algorithm":
+        items = ["проверить данные", "обработать запрос", "сохранить результат", "отправить ответ"]
+        random.shuffle(items)
+        correct = " → ".join(sorted(items, key=lambda x: ["проверить данные", "обработать запрос", "сохранить результат", "отправить ответ"].index(x)))
+        game = MiniGame("algorithm", "🧪 <b>Алгоритм!</b>\n\nРасставь этапы в правильном порядке:\n" + "\n".join(f"{i+1}. {x}" for i, x in enumerate(items)) + "\n\nОтвет: номера через пробел.", correct, 2, datetime.utcnow(), {"difficulty": "expert"})
+    elif kind == "counter":
+        count = random.randint(5, 9)
+        total = 0
+        parts = []
+        for _ in range(count):
+            a, b = random.randint(2, 20), random.randint(2, 12)
+            op = random.choice(["+", "-"])
+            value = a + b if op == "+" else a - b
+            total += value
+            parts.append(f"{a}{op}{b}")
+        game = MiniGame("counter", "🧮 <b>Счётчик!</b>\n\nВычисли сумму всех выражений:\n" + "\n".join(parts), str(total), 2, datetime.utcnow(), {"difficulty": "hard"})
+    elif kind == "space":
+        sectors = ["A1", "B2", "C3", "D4", "E5"]
+        random.shuffle(sectors)
+        answer = sectors.index("C3") + 1
+        game = MiniGame("space", "🌌 <b>Космический маршрут!</b>\n\nКорабль должен пройти сектор C3.\nМаршрут:\n" + " → ".join(sectors) + f"\n\nКаким по счёту будет C3?", str(answer), 2, datetime.utcnow(), {"difficulty": "hard"})
+    elif kind == "quiz":
+        questions = [
+            ("Какая планета ближе всего к Солнцу?", "меркурий"),
+            ("Сколько сторон у правильного шестиугольника?", "6"),
+            ("Какой океан самый большой?", "тихий"),
+            ("Сколько байт в одном килобайте по классическому двоичному исчислению?", "1024"),
+        ]
+        question, answer = random.choice(questions)
+        game = MiniGame("quiz", f"🏆 <b>Викторина!</b>\n\n{question}", answer, 2, datetime.utcnow(), {"difficulty": "normal"})
+    elif kind == "chain":
+        words = ["алгоритм", "модератор", "сервер", "репутация", "игрок", "космос", "маршрут", "телеграм"]
+        word = random.choice(words)
+        game = MiniGame("chain", f"🔤 <b>Словесная цепочка!</b>\n\nНачальное слово: <b>{word}</b>\n\nНапиши слово, которое начинается с буквы <b>{word[-1].upper()}</b>.", "", 1, datetime.utcnow(), {"difficulty": "normal", "required_first": word[-1]})
     elif kind == "memory":
         length = random.randint(5, 8)
         sequence = "".join(str(random.randint(0, 9)) for _ in range(length))
@@ -179,6 +217,12 @@ def game_catalog_text() -> str:
         "🧠 <b>Память</b> — запомни последовательность из 5–8 цифр.\n"
         "🔢 <b>Последовательность</b> — восстанови скрытую закономерность.\n"
         "🧩 <b>Логика</b> — реши задачу на закономерность за 2 попытки.\n"
-        "🔀 <b>Анаграмма PRO</b> — восстанови сложное слово за 2 попытки.\n\n"
+        "🔀 <b>Анаграмма PRO</b> — восстанови сложное слово за 2 попытки.\n"
+        "🧱 <b>Башня</b> — поднимайся этаж за этажом.\n"
+        "🧪 <b>Алгоритм</b> — выстрой этапы процесса правильно.\n"
+        "🧮 <b>Счётчик</b> — посчитай сумму серии выражений.\n"
+        "🌌 <b>Космический маршрут</b> — найди нужный сектор.\n"
+        "🏆 <b>Викторина</b> — отвечай на вопросы.\n"
+        "🔤 <b>Словесная цепочка</b> — продолжи цепь слов.\n\n"
         "За победу начисляется XP. Одновременно активна только одна игра."
     )
