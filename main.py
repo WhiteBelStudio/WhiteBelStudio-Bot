@@ -7,7 +7,7 @@ import os
 
 from dotenv import load_dotenv
 
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
@@ -103,17 +103,24 @@ async def start_handler(message: Message) -> None:
     )
 
 
-@dp.callback_query(F.data.in_({
-    "menu_profile",
-    "menu_reputation",
-    "menu_rules",
-    "shop",
-    "menu_help",
-    "help_categories",
-    "mini_games",
-    "mini_games:regular",
-    "mini_games:pvp",
-}))
+@dp.callback_query(
+    F.data.in_({
+        "menu_profile",
+        "menu_reputation",
+        "menu_rules",
+        "shop",
+        "menu_help",
+        "help_categories",
+        "mini_games",
+        "mini_games:regular",
+        "mini_games:pvp",
+    })
+    | F.data.startswith("help_category:")
+    | F.data.startswith("pvp_create:")
+    | F.data.startswith("pvp_accept:")
+    | F.data.startswith("pvp_decline:")
+    | F.data.startswith("mini_start:")
+)
 async def menu_callback_handler(callback: CallbackQuery) -> None:
     if callback.message is None:
         await callback.answer()
@@ -187,7 +194,8 @@ HELP_CATEGORIES = {
     ),
     "moderation": (
         "🛡 <b>Модерация</b>\n\n"
-        "Модерационные команды будут доступны после подключения системы модерации."
+        "Раздел модерации предназначен для администраторов и модераторов.\n"
+        "Если у тебя есть права, используй доступные административные команды из панели бота."
     ),
 }
 
