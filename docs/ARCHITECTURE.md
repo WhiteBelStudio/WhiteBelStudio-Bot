@@ -152,14 +152,16 @@ Hosts the Mini App frontend. It consumes the FastAPI API.
 
 ## 10. Current implementation boundary
 
-The repository currently uses main.py as the composition root and keeps Telegram feature routers under app/bot/. Business logic is concentrated in app/services/, persistence primitives in app/db/, and migrations in migrations/.
+The repository uses main.py only as a thin composition root. Telegram composition and lifecycle code lives under app/bot/runtime.py and app/bot/api_runtime.py; core Telegram commands/navigation live in app/bot/core.py. Business logic is concentrated in app/services/, persistence primitives in app/db/, and migrations in migrations/.
 
 Current enforced boundaries:
 
 - The retired social/friends subsystem is not a runtime dependency.
 - Telegram routers own presentation and update handling; services own domain operations.
 - Database access is centralized through app/db/engine.py and repository/service layers.
-- Global error handling is centralized at the dispatcher boundary; expected domain errors are handled locally.
+- Dispatcher construction and global update error handling are centralized in app/bot/runtime.py; expected domain errors are handled locally.
+- main.py does not define Telegram handlers, keyboards, dispatcher middleware, or API server configuration.
+- app/bot/core.py owns core Telegram presentation/commands; app/bot/runtime.py owns dispatcher composition; app/bot/api_runtime.py owns Uvicorn configuration.
 - Production startup validates environment, compiles the application, applies migrations, and verifies the resulting schema before starting the bot.
 
 Future extraction of main.py into dedicated bot modules is a maintainability improvement, not a prerequisite for the current runtime boundary.
