@@ -123,3 +123,13 @@ async def set_user_active(
     await session.commit()
     await session.refresh(user)
     return user
+
+
+async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
+    normalized = username.strip().lstrip("@").lower()
+    if not normalized:
+        return None
+    result = await session.execute(
+        select(User).where(User.username.is_not(None), User.username.ilike(normalized))
+    )
+    return result.scalar_one_or_none()
