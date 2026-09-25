@@ -59,21 +59,15 @@ async def show_shop(message: Message, category: str | None = None, *, edit: bool
             lines.append(f"<b>#{item.id} {item.name}</b> — 🪙 {item.price:.1f}")
             lines.append(item.description)
             lines.append("")
-        text = "
-".join(lines)
+        text = "\n".join(lines)
         markup = items_keyboard(items)
     else:
         text = (
-            "🛒 <b>Магазин WhiteBelStudio</b>
-
-"
-            f"🪙 Баланс: <b>{balance:.1f}</b>
-
-"
+            "🛒 <b>Магазин WhiteBelStudio</b>\n\n"
+            f"🪙 Баланс: <b>{balance:.1f}</b>\n\n"
             "Выбери раздел:"
         )
         markup = shop_categories_keyboard()
-
     if edit:
         await message.edit_text(text, reply_markup=markup)
     else:
