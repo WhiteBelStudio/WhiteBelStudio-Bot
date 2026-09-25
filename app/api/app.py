@@ -1,18 +1,23 @@
 from __future__ import annotations
 
-import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
-from app.api.request_id import RequestIdMiddleware, get_request_id
+from app.api.errors import (
+    http_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
+from app.api.request_id import RequestIdMiddleware
 from app.api.request_logging import RequestLoggingMiddleware
 from app.api.routes import router as api_router
 from app.logging import configure_logging
 from app.services.health import check_readiness
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 @asynccontextmanager
@@ -24,7 +29,10 @@ def _cors_origins() -> list[str]:
     raw = os.getenv("API_CORS_ORIGINS", "").strip()
     if not raw:
         return []
-    return [item.strip() for item in raw.split(",") if item.strip()]
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    if "*" in origins:
+        raise RuntimeError("API_CORS_ORIGINS must not contain '*'")
+    return origins
 
 
 configure_logging()
@@ -34,10 +42,10 @@ app = FastAPI(
     version=os.getenv("APP_VERSION", "0.1.0"),
     description="HTTP API for WhiteBelStudio integrations and Mini App.",
     docs_url="/docs"
-    if os.getenv("API_DOCS_ENABLED", "true").lower() in {"1", "true", "yes"}
+    if os.getenv("API_DOCS_ENABLED", "false").lower() in {"1", "true", "yes"}
     else None,
     redoc_url="/redoc"
-    if os.getenv("API_DOCS_ENABLED", "true").lower() in {"1", "true", "yes"}
+    if os.getenv("API_DOCS_ENABLED", "false").lower() in {"1", "true", "yes"}
     else None,
 )
 
@@ -63,21 +71,9 @@ if origins:
     )
 
 
-@app.exception_handler(Exception)
-async def unhandled_api_error(request: Request, exc: Exception) -> JSONResponse:
-    request_id = get_request_id() or request.headers.get("X-Request-ID") or ""
-    logging.getLogger("app.api.errors").exception(
-        "unhandled_api_error",
-        extra={"request_id": request_id},
-    )
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Internal server error",
-            "request_id": request_id,
-        },
-        headers={"X-Request-ID": request_id},
-    )
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 
 @app.get("/health", tags=["health"])
