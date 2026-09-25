@@ -4,7 +4,9 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.errors import (
     http_exception_handler,
@@ -16,8 +18,6 @@ from app.api.request_logging import RequestLoggingMiddleware
 from app.api.routes import router as api_router
 from app.logging import configure_logging
 from app.services.health import check_readiness
-from fastapi.exceptions import RequestValidationError
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 @asynccontextmanager
