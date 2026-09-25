@@ -39,7 +39,6 @@ def upgrade() -> None:
         sa.Column("price", sa.Numeric(12, 1), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint([], []),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("code", name="uq_shop_item_code"),
     )
