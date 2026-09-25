@@ -64,6 +64,19 @@ async def set_chat_reputation_vote(
     if score not in (-1, 1):
         raise ValueError("score must be -1 or 1")
 
+    users_result = await session.execute(
+        select(User).where(User.id.in_([rater_id, rated_id]))
+    )
+    users = {user.id: user for user in users_result.scalars().all()}
+    rater = users.get(rater_id)
+    rated = users.get(rated_id)
+    if rater is None or rated is None:
+        raise ValueError("user_not_found")
+    if not rater.is_active or rater.is_bot:
+        raise ValueError("rater_not_allowed")
+    if not rated.is_active or rated.is_bot:
+        raise ValueError("rated_not_allowed")
+
     result = await session.execute(
         select(CommunityReputationVote).where(
             CommunityReputationVote.chat_id == chat_id,
