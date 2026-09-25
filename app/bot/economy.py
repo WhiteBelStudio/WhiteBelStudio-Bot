@@ -59,12 +59,17 @@ async def show_shop(message: Message, category: str | None = None, *, edit: bool
             lines.append(f"<b>#{item.id} {item.name}</b> — 🪙 {item.price:.1f}")
             lines.append(item.description)
             lines.append("")
-        text = "\n".join(lines)
+        text = "
+".join(lines)
         markup = items_keyboard(items)
     else:
         text = (
-            "🛒 <b>Магазин WhiteBelStudio</b>\n\n"
-            f"🪙 Баланс: <b>{balance:.1f}</b>\n\n"
+            "🛒 <b>Магазин WhiteBelStudio</b>
+
+"
+            f"🪙 Баланс: <b>{balance:.1f}</b>
+
+"
             "Выбери раздел:"
         )
         markup = shop_categories_keyboard()
@@ -80,7 +85,8 @@ async def balance_handler(message: Message) -> None:
     if message.from_user is None:
         return
     async for session in get_session():
-        user, _ = await sync_telegram_user(session, message.from_user)\n        balance = await get_balance(session, user.id)
+        user, _ = await sync_telegram_user(session, message.from_user)
+        balance = await get_balance(session, user.id)
     await message.answer(f"🪙 <b>Твой баланс: {balance:.1f}</b>")
 
 
@@ -90,15 +96,20 @@ async def daily_handler(message: Message) -> None:
         return
     try:
         async for session in get_session():
-            user, _ = await sync_telegram_user(session, message.from_user)\n            result = await claim_daily(session, user.id)
+            user, _ = await sync_telegram_user(session, message.from_user)
+            result = await claim_daily(session, user.id)
         if not result.claimed:
             await message.answer(
-                f"🎁 {result.message}\n🔥 Серия: <b>{result.streak} дней</b>"
+                f"🎁 {result.message}
+🔥 Серия: <b>{result.streak} дней</b>"
             )
             return
         await message.answer(
-            f"🎁 <b>Ежедневная награда получена!</b>\n\n"
-            f"🪙 +{result.amount:.1f}\n"
+            f"🎁 <b>Ежедневная награда получена!</b>
+
+"
+            f"🪙 +{result.amount:.1f}
+"
             f"🔥 Серия: <b>{result.streak} дней</b>"
         )
     except Exception as exc:
@@ -118,14 +129,16 @@ async def inventory_handler(message: Message) -> None:
     if message.from_user is None:
         return
     async for session in get_session():
-        user, _ = await sync_telegram_user(session, message.from_user)\n        rows = await get_inventory(session, user.id)
+        user, _ = await sync_telegram_user(session, message.from_user)
+        rows = await get_inventory(session, user.id)
     if not rows:
         await message.answer("📦 Инвентарь пуст. Открой /shop.")
         return
     lines = ["📦 <b>Мои предметы</b>", ""]
     for inventory, item in rows:
         lines.append(f"{item.name} × <b>{inventory.quantity}</b> — {item.description}")
-    await message.answer("\n".join(lines))
+    await message.answer("
+".join(lines))
 
 
 @router.message(Command("coinhistory"))
@@ -133,7 +146,8 @@ async def coin_history_handler(message: Message) -> None:
     if message.from_user is None:
         return
     async for session in get_session():
-        user, _ = await sync_telegram_user(session, message.from_user)\n        rows = await list_transactions(session, user.id, 15)
+        user, _ = await sync_telegram_user(session, message.from_user)
+        rows = await list_transactions(session, user.id, 15)
     if not rows:
         await message.answer("📜 История операций пока пуста.")
         return
@@ -141,7 +155,8 @@ async def coin_history_handler(message: Message) -> None:
     for row in rows:
         sign = "+" if row.amount > 0 else ""
         lines.append(f"{sign}{row.amount:.1f} 🪙 · {row.reason}")
-    await message.answer("\n".join(lines))
+    await message.answer("
+".join(lines))
 
 
 @router.callback_query(F.data == "shop")
@@ -165,14 +180,18 @@ async def shop_inventory_callback(callback: CallbackQuery) -> None:
         await callback.answer()
         return
     async for session in get_session():
-        user, _ = await sync_telegram_user(session, callback.from_user)\n        rows = await get_inventory(session, user.id)
+        user, _ = await sync_telegram_user(session, callback.from_user)
+        rows = await get_inventory(session, user.id)
     if not rows:
-        text = "📦 <b>Мои предметы</b>\n\nИнвентарь пока пуст."
+        text = "📦 <b>Мои предметы</b>
+
+Инвентарь пока пуст."
     else:
         lines = ["📦 <b>Мои предметы</b>", ""]
         for inventory, item in rows:
             lines.append(f"{item.name} × <b>{inventory.quantity}</b>")
-        text = "\n".join(lines)
+        text = "
+".join(lines)
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🛒 В магазин", callback_data="shop")]
     ])
@@ -188,10 +207,16 @@ async def shop_buy_callback(callback: CallbackQuery) -> None:
     try:
         item_id = int((callback.data or "").split(":", 1)[1])
         async for session in get_session():
-            user, _ = await sync_telegram_user(session, callback.from_user)\n            item, _, new_balance = await purchase_item(session, user.id, item_id)
+            user, _ = await sync_telegram_user(session, callback.from_user)
+            item, _, new_balance = await purchase_item(session, user.id, item_id)
         await callback.message.edit_text(
-            f"✅ <b>Покупка выполнена!</b>\n\n"
-            f"{item.name}\n{item.description}\n\n"
+            f"✅ <b>Покупка выполнена!</b>
+
+"
+            f"{item.name}
+{item.description}
+
+"
             f"🪙 Остаток: <b>{new_balance:.1f}</b>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🛒 Вернуться в магазин", callback_data="shop")]
@@ -232,8 +257,11 @@ async def gift_handler(message: Message) -> None:
                 raise ValueError("recipient_not_found")
             item, new_balance = await gift_item(session, sender.id, recipient.id, item_id)
         await message.answer(
-            f"🎁 <b>Подарок отправлен!</b>\n\n"
-            f"{item.name} → @{recipient.username or recipient.first_name}\n"
+            f"🎁 <b>Подарок отправлен!</b>
+
+"
+            f"{item.name} → @{recipient.username or recipient.first_name}
+"
             f"🪙 Остаток: <b>{new_balance:.1f}</b>"
         )
     except ValueError as exc:
@@ -254,11 +282,18 @@ async def economy_handler(message: Message) -> None:
     if message.from_user is None:
         return
     await message.answer(
-        "🪙 <b>Экономика</b>\n\n"
-        "/balance — баланс\n"
-        "/daily — ежедневная награда\n"
-        "/shop — магазин\n"
-        "/inventory — мои предметы\n"
-        "/coinhistory — история монет\n"
+        "🪙 <b>Экономика</b>
+
+"
+        "/balance — баланс
+"
+        "/daily — ежедневная награда
+"
+        "/shop — магазин
+"
+        "/inventory — мои предметы
+"
+        "/coinhistory — история монет
+"
         "/gift @username ID — подарить подарок"
     )
