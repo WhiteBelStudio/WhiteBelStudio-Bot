@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import CoinTransaction, EconomyAccount, ShopItem, UserInventory
@@ -19,6 +19,25 @@ DAILY_REWARDS: dict[int, Decimal] = {
     6: Decimal("1.5"),
     7: Decimal("2.0"),
 }
+GAME_REWARD_CAP = Decimal("10.0")
+GAME_REWARD_RESULT_LIMIT = 20
+GAME_REWARDS: dict[str, dict[str, Decimal]] = {
+    "math": {"win": Decimal("1.0"), "loss": Decimal("0.1"), "draw": Decimal("0.5")},
+    "code": {"win": Decimal("1.5"), "loss": Decimal("0.1"), "draw": Decimal("0.7")},
+    "word": {"win": Decimal("1.0"), "loss": Decimal("0.1"), "draw": Decimal("0.5")},
+    "sequence": {"win": Decimal("1.5"), "loss": Decimal("0.1"), "draw": Decimal("0.7")},
+    "logic": {"win": Decimal("1.5"), "loss": Decimal("0.1"), "draw": Decimal("0.7")},
+    "anagram": {"win": Decimal("1.5"), "loss": Decimal("0.1"), "draw": Decimal("0.7")},
+    "tower": {"win": Decimal("2.0"), "loss": Decimal("0.1"), "draw": Decimal("1.0")},
+    "algorithm": {"win": Decimal("2.0"), "loss": Decimal("0.1"), "draw": Decimal("1.0")},
+    "counter": {"win": Decimal("1.5"), "loss": Decimal("0.1"), "draw": Decimal("0.7")},
+    "space": {"win": Decimal("2.0"), "loss": Decimal("0.1"), "draw": Decimal("1.0")},
+    "quiz": {"win": Decimal("1.0"), "loss": Decimal("0.1"), "draw": Decimal("0.5")},
+    "chain": {"win": Decimal("1.0"), "loss": Decimal("0.1"), "draw": Decimal("0.5")},
+    "pvp": {"win": Decimal("2.0"), "loss": Decimal("0.5"), "draw": Decimal("1.0")},
+}
+
+
 MILESTONE_REWARDS: dict[int, Decimal] = {
     14: Decimal("5.0"),
     30: Decimal("15.0"),
@@ -119,6 +138,60 @@ async def claim_daily(session: AsyncSession, user_id: int, now: datetime | None 
 
     bonus_text = f" +{milestone:.1f} за {streak} дней!" if milestone else ""
     return DailyResult(True, total, streak, f"Награда получена: +{total:.1f} монет.{bonus_text}")
+
+
+async def award_game_coins(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    game_kind: str,
+    result: str,
+    now: datetime | None = None,
+) -> Decimal:
+    """Award non-wagered game coins with a per-user UTC daily anti-farm cap."""
+    if result not in {"win", "loss", "draw"}:
+        raise ValueError("result must be win, loss or draw")
+
+    reward = GAME_REWARDS.get(game_kind, GAME_REWARDS["math"]).get(result, Decimal("0.0"))
+    if reward <= 0:
+        return Decimal("0.0")
+
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    now_utc = now.astimezone(timezone.utc)
+    day_start = datetime.combine(now_utc.date(), datetime.min.time(), tzinfo=timezone.utc)
+
+    account = await get_or_create_economy(session, user_id)
+    await session.refresh(account, with_for_update=True)
+
+    result_count_query = await session.execute(
+        select(func.count(CoinTransaction.id)).where(
+            CoinTransaction.user_id == user_id,
+            CoinTransaction.reason == "game_reward",
+            CoinTransaction.created_at >= day_start,
+        )
+    )
+    if int(result_count_query.scalar_one() or 0) >= GAME_REWARD_RESULT_LIMIT:
+        return Decimal("0.0")
+
+    earned_query = await session.execute(
+        select(func.coalesce(func.sum(CoinTransaction.amount), 0)).where(
+            CoinTransaction.user_id == user_id,
+            CoinTransaction.reason == "game_reward",
+            CoinTransaction.created_at >= day_start,
+            CoinTransaction.amount > 0,
+        )
+    )
+    earned_today = Decimal(earned_query.scalar_one() or 0).quantize(Decimal("0.1"))
+    allowed = max(Decimal("0.0"), GAME_REWARD_CAP - earned_today)
+    reward = min(reward, allowed).quantize(Decimal("0.1"))
+    if reward <= 0:
+        return Decimal("0.0")
+
+    new_balance = await change_balance(session, user_id, reward, "game_reward")
+    await session.commit()
+    return reward
 
 
 async def list_transactions(session: AsyncSession, user_id: int, limit: int = 10) -> list[CoinTransaction]:
