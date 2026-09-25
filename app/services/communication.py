@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Conversation, Friendship, MessageRecord, User
+from app.db.models import Conversation, MessageRecord, User
 
 
 def _pair(left_id: int, right_id: int) -> tuple[int, int]:
@@ -21,17 +21,6 @@ async def get_conversation(session: AsyncSession, left_id: int, right_id: int) -
         )
     )
     return result.scalar_one_or_none()
-
-
-async def _are_friends(session: AsyncSession, left_id: int, right_id: int) -> bool:
-    low, high = _pair(left_id, right_id)
-    result = await session.execute(
-        select(Friendship.id).where(
-            Friendship.user_low_id == low,
-            Friendship.user_high_id == high,
-        )
-    )
-    return result.scalar_one_or_none() is not None
 
 
 async def send_message(
@@ -54,9 +43,6 @@ async def send_message(
     recipient = await session.get(User, recipient_id)
     if recipient is None or not recipient.is_active or recipient.is_bot:
         return "unavailable", None
-
-    if not await _are_friends(session, sender_id, recipient_id):
-        return "not_friends", None
 
     conversation = await get_conversation(session, sender_id, recipient_id)
     if conversation is None:
