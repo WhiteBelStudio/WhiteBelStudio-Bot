@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from aiogram import Bot
 from aiogram.types import CallbackQuery, Chat, Message, Update, User
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.db.engine import get_session
 from app.db.models import User as DbUser
@@ -43,10 +43,30 @@ def _update(data: str, telegram_id: int) -> Update:
     )
 
 
-async def _session_call(coro_factory):
+async def _session_call(factory):
     async for session in get_session():
-        return await coro_factory(session)
+        return await factory(session)
     raise AssertionError("database session was not created")
+
+
+async def _user_id(session, telegram_id: int) -> int:
+    user = (
+        await session.execute(
+            select(DbUser).where(DbUser.telegram_id == telegram_id)
+        )
+    ).scalar_one()
+    return user.id
+
+
+async def _create_users(session, creator_id: int, opponent_id: int) -> None:
+    await sync_telegram_user(
+        session,
+        User(id=creator_id, is_bot=False, first_name="Creator", username="creator"),
+    )
+    await sync_telegram_user(
+        session,
+        User(id=opponent_id, is_bot=False, first_name="Opponent", username="opponent"),
+    )
 
 
 @pytest.mark.asyncio
@@ -58,9 +78,7 @@ async def test_pvp_callback_create_and_accept_persist_real_postgresql(
     opponent_id = 910000302
     bot = Bot("123456:INTEGRATION")
 
-    await _session_call(
-        lambda session: _create_users(session, creator_id, opponent_id)
-    )
+    await _session_call(lambda session: _create_users(session, creator_id, opponent_id))
 
     try:
         with (
@@ -72,12 +90,10 @@ async def test_pvp_callback_create_and_accept_persist_real_postgresql(
         assert message_answer.await_count >= 1
         callback_answer.assert_awaited_once()
 
-        match = await _session_call(
-            lambda session: get_active_match(
-                session,
-                _user_id(session, creator_id),
-            )
-        )
+        async def get_creator_match(session):
+            return await get_active_match(session, await _user_id(session, creator_id))
+
+        match = await _session_call(get_creator_match)
         assert match is not None
         assert match.status == "pending"
         match_id = match.id
@@ -94,16 +110,14 @@ async def test_pvp_callback_create_and_accept_persist_real_postgresql(
         assert message_answer.await_count >= 1
         callback_answer.assert_awaited_once()
 
-        match = await _session_call(
-            lambda session: get_active_match(
-                session,
-                _user_id(session, opponent_id),
-            )
-        )
+        async def get_opponent_match(session):
+            return await get_active_match(session, await _user_id(session, opponent_id))
+
+        match = await _session_call(get_opponent_match)
         assert match is not None
         assert match.id == match_id
         assert match.status == "active"
-        assert match.opponent_id == _user_id(session, opponent_id)
+        assert match.opponent_id == await _user_id_from_session(match, opponent_id)
     finally:
         async for session in get_session():
             await session.execute(
@@ -115,17 +129,8 @@ async def test_pvp_callback_create_and_accept_persist_real_postgresql(
         await bot.session.close()
 
 
-async def _create_users(session, creator_id: int, opponent_id: int) -> None:
-    await sync_telegram_user(
-        session,
-        User(id=creator_id, is_bot=False, first_name="Creator", username="creator"),
-    )
-    await sync_telegram_user(
-        session,
-        User(id=opponent_id, is_bot=False, first_name="Opponent", username="opponent"),
-    )
-
-
-def _user_id(session, telegram_id: int) -> int:
-    # This helper is replaced by the SQL lookup in the async wrapper below.
-    raise AssertionError(f"user {telegram_id} lookup requires async database access")
+async def _user_id_from_session(match, telegram_id: int) -> int:
+    # Kept async so assertions remain independent of SQLAlchemy session lifetime.
+    async for session in get_session():
+        return await _user_id(session, telegram_id)
+    raise AssertionError("database session was not created")
