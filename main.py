@@ -262,6 +262,13 @@ def mini_games_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🔤 Шифровальщик", callback_data="mini_start:word"),
                 InlineKeyboardButton(text="🧠 Память", callback_data="mini_start:memory"),
             ],
+            [
+                InlineKeyboardButton(text="🔢 Последовательность", callback_data="mini_start:sequence"),
+                InlineKeyboardButton(text="🧩 Логика", callback_data="mini_start:logic"),
+            ],
+            [
+                InlineKeyboardButton(text="🔀 Анаграмма PRO", callback_data="mini_start:anagram"),
+            ],
         ]
     )
 
@@ -353,7 +360,7 @@ async def mini_game_answer_handler(message: Message) -> None:
         return
 
     if status == "win":
-        xp = {"math": 40, "code": 65, "word": 50, "memory": 75}.get(finished_game.kind, 40)
+        xp = {"math": 40, "code": 65, "word": 50, "memory": 75, "sequence": 70, "logic": 80, "anagram": 85}.get(finished_game.kind, 40)
         try:
             async for session in get_session():
                 await record_game_result(session, message.from_user.id, result="win", experience=xp)
