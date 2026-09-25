@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.services.health import check_readiness
+from app.api.request_id import RequestIdMiddleware, get_request_id
 from app.api.routes import router as api_router
 
 
@@ -31,6 +32,8 @@ app = FastAPI(
     redoc_url="/redoc" if os.getenv("API_DOCS_ENABLED", "true").lower() in {"1", "true", "yes"} else None,
 )
 
+app.add_middleware(RequestIdMiddleware)
+
 origins = _cors_origins()
 if origins:
     app.add_middleware(
@@ -44,10 +47,12 @@ if origins:
 
 @app.exception_handler(Exception)
 async def unhandled_api_error(_: Request, exc: Exception) -> JSONResponse:
-    print(f"[api] unhandled error: {exc!r}", flush=True)
+    request_id = get_request_id()
+    print(f"[api] unhandled error request_id={request_id} error={exc!r}", flush=True)
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"},
+        content={"detail": "Internal server error", "request_id": request_id},
+        headers={"X-Request-ID": request_id or ""},
     )
 
 
