@@ -140,6 +140,24 @@ async def claim_daily(session: AsyncSession, user_id: int, now: datetime | None 
     return DailyResult(True, total, streak, f"Награда получена: +{total:.1f} монет.{bonus_text}")
 
 
+def calculate_game_reward(
+    *,
+    game_kind: str,
+    result: str,
+    earned_today: Decimal,
+    result_count: int,
+) -> Decimal:
+    """Calculate a capped game reward without touching the database."""
+    if result not in {"win", "loss", "draw"}:
+        raise ValueError("result must be win, loss or draw")
+    if result_count >= GAME_REWARD_RESULT_LIMIT:
+        return Decimal("0.0")
+
+    reward = GAME_REWARDS.get(game_kind, GAME_REWARDS["math"]).get(result, Decimal("0.0"))
+    allowed = max(Decimal("0.0"), GAME_REWARD_CAP - Decimal(earned_today))
+    return min(reward, allowed).quantize(Decimal("0.1"))
+
+
 async def award_game_coins(
     session: AsyncSession,
     user_id: int,
@@ -149,12 +167,6 @@ async def award_game_coins(
     now: datetime | None = None,
 ) -> Decimal:
     """Award non-wagered game coins with a per-user UTC daily anti-farm cap."""
-    if result not in {"win", "loss", "draw"}:
-        raise ValueError("result must be win, loss or draw")
-
-    reward = GAME_REWARDS.get(game_kind, GAME_REWARDS["math"]).get(result, Decimal("0.0"))
-    if reward <= 0:
-        return Decimal("0.0")
 
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -184,8 +196,12 @@ async def award_game_coins(
         )
     )
     earned_today = Decimal(earned_query.scalar_one() or 0).quantize(Decimal("0.1"))
-    allowed = max(Decimal("0.0"), GAME_REWARD_CAP - earned_today)
-    reward = min(reward, allowed).quantize(Decimal("0.1"))
+    reward = calculate_game_reward(
+        game_kind=game_kind,
+        result=result,
+        earned_today=earned_today,
+        result_count=int(result_count_query.scalar_one() or 0),
+    )
     if reward <= 0:
         return Decimal("0.0")
 
