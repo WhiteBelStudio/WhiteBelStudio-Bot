@@ -13,8 +13,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_table("friendships")
-    op.drop_table("friend_requests")
+    op.drop_table("friendships", if_exists=True)
+    op.drop_table("friend_requests", if_exists=True)
 
 
 def downgrade() -> None:
