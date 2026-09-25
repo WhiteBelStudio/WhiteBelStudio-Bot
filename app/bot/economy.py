@@ -45,8 +45,11 @@ def items_keyboard(items) -> InlineKeyboardMarkup:
 
 
 async def show_shop(message: Message, category: str | None = None, *, edit: bool = False) -> None:
+    if message.from_user is None:
+        return
     async for session in get_session():
-        balance = await get_balance(session, message.from_user.id)
+        user, _ = await sync_telegram_user(session, message.from_user)
+        balance = await get_balance(session, user.id)
         items = await list_shop_items(session, category)
 
     if category:
@@ -77,7 +80,7 @@ async def balance_handler(message: Message) -> None:
     if message.from_user is None:
         return
     async for session in get_session():
-        balance = await get_balance(session, message.from_user.id)
+        user, _ = await sync_telegram_user(session, message.from_user)\n        balance = await get_balance(session, user.id)
     await message.answer(f"🪙 <b>Твой баланс: {balance:.1f}</b>")
 
 
@@ -87,7 +90,7 @@ async def daily_handler(message: Message) -> None:
         return
     try:
         async for session in get_session():
-            result = await claim_daily(session, message.from_user.id)
+            user, _ = await sync_telegram_user(session, message.from_user)\n            result = await claim_daily(session, user.id)
         if not result.claimed:
             await message.answer(
                 f"🎁 {result.message}\n🔥 Серия: <b>{result.streak} дней</b>"
@@ -115,7 +118,7 @@ async def inventory_handler(message: Message) -> None:
     if message.from_user is None:
         return
     async for session in get_session():
-        rows = await get_inventory(session, message.from_user.id)
+        user, _ = await sync_telegram_user(session, message.from_user)\n        rows = await get_inventory(session, user.id)
     if not rows:
         await message.answer("📦 Инвентарь пуст. Открой /shop.")
         return
@@ -130,7 +133,7 @@ async def coin_history_handler(message: Message) -> None:
     if message.from_user is None:
         return
     async for session in get_session():
-        rows = await list_transactions(session, message.from_user.id, 15)
+        user, _ = await sync_telegram_user(session, message.from_user)\n        rows = await list_transactions(session, user.id, 15)
     if not rows:
         await message.answer("📜 История операций пока пуста.")
         return
@@ -162,7 +165,7 @@ async def shop_inventory_callback(callback: CallbackQuery) -> None:
         await callback.answer()
         return
     async for session in get_session():
-        rows = await get_inventory(session, callback.from_user.id)
+        user, _ = await sync_telegram_user(session, callback.from_user)\n        rows = await get_inventory(session, user.id)
     if not rows:
         text = "📦 <b>Мои предметы</b>\n\nИнвентарь пока пуст."
     else:
@@ -185,7 +188,7 @@ async def shop_buy_callback(callback: CallbackQuery) -> None:
     try:
         item_id = int((callback.data or "").split(":", 1)[1])
         async for session in get_session():
-            item, _, new_balance = await purchase_item(session, callback.from_user.id, item_id)
+            user, _ = await sync_telegram_user(session, callback.from_user)\n            item, _, new_balance = await purchase_item(session, user.id, item_id)
         await callback.message.edit_text(
             f"✅ <b>Покупка выполнена!</b>\n\n"
             f"{item.name}\n{item.description}\n\n"
