@@ -7,8 +7,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.logging import configure_logging
 from app.services.health import check_readiness
 from app.api.request_id import RequestIdMiddleware, get_request_id
+from app.api.request_logging import RequestLoggingMiddleware
 from app.api.routes import router as api_router
 
 
@@ -24,7 +26,7 @@ def _cors_origins() -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-app = FastAPI(
+configure_logging()\n\napp = FastAPI(
     title="WhiteBelStudio API",
     version=os.getenv("APP_VERSION", "0.1.0"),
     description="HTTP API for WhiteBelStudio integrations and Mini App.",
@@ -32,7 +34,7 @@ app = FastAPI(
     redoc_url="/redoc" if os.getenv("API_DOCS_ENABLED", "true").lower() in {"1", "true", "yes"} else None,
 )
 
-app.add_middleware(RequestIdMiddleware)
+app.add_middleware(RequestIdMiddleware)\napp.add_middleware(RequestLoggingMiddleware)
 
 origins = _cors_origins()
 if origins:
@@ -49,7 +51,7 @@ if origins:
 @app.exception_handler(Exception)
 async def unhandled_api_error(_: Request, exc: Exception) -> JSONResponse:
     request_id = get_request_id()
-    print(f"[api] unhandled error request_id={request_id} error={exc!r}", flush=True)
+    import logging\n    logging.getLogger("app.api.errors").exception(\n        "unhandled_api_error", extra={"request_id": request_id}\n    )
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "request_id": request_id},
