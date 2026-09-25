@@ -105,6 +105,7 @@ async def list_user_achievements(
     user_id: int,
 ) -> tuple[list[AchievementSpec], list[AchievementSpec]]:
     await ensure_achievements(session)
+    await session.commit()
     earned_codes = set(
         (
             await session.execute(
