@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 import os
-import re
 from typing import Any
 
 from aiogram import BaseMiddleware
@@ -83,7 +82,11 @@ async def _handle_group_reputation(message: Message) -> bool:
             await message.answer(format_community_reputation(name, score, history))
             return True
 
-        target_user, _ = await sync_telegram_user(session, target)
+        if hasattr(target, "telegram_id"):
+            target_user = target
+        else:
+            target_user, _ = await sync_telegram_user(session, target)
+
         if target_user.id == actor.id:
             await message.answer("🙂 Нельзя изменять собственную репутацию.")
             return True
