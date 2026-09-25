@@ -57,3 +57,76 @@ def test_future_init_data_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BOT_TOKEN", token)
     with pytest.raises(TelegramInitDataError, match="Expired"):
         validate_telegram_init_data(make_init_data(token, auth_date=1000), now=1000 - 61)
+
+
+@pytest.mark.asyncio
+async def test_authentication_binds_to_existing_chat_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services import security
+
+    token = "123456:TEST"
+    monkeypatch.setenv("BOT_TOKEN", token)
+    chat_user = object()
+
+    async def fake_get_user_by_telegram_id(session: object, telegram_id: int) -> object:
+        assert telegram_id == 123
+        return chat_user
+
+    class DummySession:
+        pass
+
+    async def fake_get_session():
+        yield DummySession()
+
+    monkeypatch.setattr(security, "get_user_by_telegram_id", fake_get_user_by_telegram_id)
+    monkeypatch.setattr(security, "get_session", fake_get_session)
+
+    result = await security.authenticate_telegram_init_data(make_init_data(token))
+    assert result is chat_user
+
+
+@pytest.mark.asyncio
+async def test_authentication_rejects_unregistered_chat_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services import security
+
+    token = "123456:TEST"
+    monkeypatch.setenv("BOT_TOKEN", token)
+
+    async def fake_get_user_by_telegram_id(session: object, telegram_id: int) -> None:
+        return None
+
+    async def fake_get_session():
+        yield object()
+
+    monkeypatch.setattr(security, "get_user_by_telegram_id", fake_get_user_by_telegram_id)
+    monkeypatch.setattr(security, "get_session", fake_get_session)
+
+    with pytest.raises(TelegramInitDataError, match="not registered"):
+        await security.authenticate_telegram_init_data(make_init_data(token))
+
+
+@pytest.mark.asyncio
+async def test_authentication_rejects_inactive_chat_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services import security
+    from app.db.models import User
+
+    token = "123456:TEST"
+    monkeypatch.setenv("BOT_TOKEN", token)
+    chat_user = User(
+        id=7,
+        telegram_id=123,
+        first_name="Test",
+        is_bot=False,
+        is_active=False,
+    )
+
+    async def fake_get_user_by_telegram_id(session: object, telegram_id: int) -> User:
+        return chat_user
+
+    async def fake_get_session():
+        yield object()
+
+    monkeypatch.setattr(security, "get_user_by_telegram_id", fake_get_user_by_telegram_id)
+    monkeypatch.setattr(security, "get_session", fake_get_session)
+
+    with pytest.raises(TelegramInitDataError, match="not allowed"):
+        await security.authenticate_telegram_init_data(make_init_data(token))
