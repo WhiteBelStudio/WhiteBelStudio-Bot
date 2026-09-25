@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -69,6 +69,8 @@ class ReputationRating(Base):
     __tablename__ = "reputation_ratings"
     __table_args__ = (
         UniqueConstraint("rater_id", "rated_id", name="uq_reputation_rating_pair"),
+        CheckConstraint("score BETWEEN 1 AND 5", name="ck_reputation_rating_score"),
+        CheckConstraint("rater_id <> rated_id", name="ck_reputation_rating_not_self"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -113,6 +115,8 @@ class CommunityReputationVote(Base):
     __tablename__ = "community_reputation_votes"
     __table_args__ = (
         UniqueConstraint("chat_id", "rater_id", "rated_id", name="uq_community_rep_vote"),
+        CheckConstraint("score IN (-1, 1)", name="ck_community_rep_vote_score"),
+        CheckConstraint("rater_id <> rated_id", name="ck_community_rep_vote_not_self"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -156,7 +160,13 @@ class GameProfile(Base):
 
 class EconomyAccount(Base):
     __tablename__ = "economy_accounts"
-    __table_args__ = (UniqueConstraint("user_id", name="uq_economy_account_user"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_economy_account_user"),
+        CheckConstraint("balance >= 0", name="ck_economy_balance_nonnegative"),
+        CheckConstraint("daily_streak >= 0", name="ck_economy_daily_streak_nonnegative"),
+        CheckConstraint("lifetime_earned >= 0", name="ck_economy_lifetime_earned_nonnegative"),
+        CheckConstraint("lifetime_spent >= 0", name="ck_economy_lifetime_spent_nonnegative"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -182,7 +192,10 @@ class ShopItem(Base):
 
 class UserInventory(Base):
     __tablename__ = "user_inventory"
-    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_inventory_user_item"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "item_id", name="uq_inventory_user_item"),
+        CheckConstraint("quantity > 0", name="ck_inventory_quantity_positive"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -193,6 +206,9 @@ class UserInventory(Base):
 
 class CoinTransaction(Base):
     __tablename__ = "coin_transactions"
+    __table_args__ = (
+        CheckConstraint("amount <> 0 OR reason = 'gift_received'", name="ck_coin_transaction_zero_only_gift_received"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -206,6 +222,10 @@ class CoinTransaction(Base):
 
 class PvpMatch(Base):
     __tablename__ = "pvp_matches"
+    __table_args__ = (
+        CheckConstraint("creator_id <> opponent_id OR opponent_id IS NULL", name="ck_pvp_match_not_self"),
+        CheckConstraint("status IN ('open', 'active', 'declined', 'expired', 'finished', 'draw')", name="ck_pvp_match_status"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     creator_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
