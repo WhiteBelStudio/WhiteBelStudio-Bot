@@ -78,6 +78,9 @@ jobs:
           python -m alembic upgrade head
           python -m alembic check
 
+      - name: Unit and API tests
+        run: python -m pytest -q -m "not integration" --strict-markers --disable-warnings --maxfail=1
+
       - name: Integration tests
         run: python -m pytest -q -m integration --strict-markers --disable-warnings --maxfail=1
 
