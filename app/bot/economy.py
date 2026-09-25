@@ -170,21 +170,17 @@ async def shop_inventory_callback(callback: CallbackQuery) -> None:
         user, _ = await sync_telegram_user(session, callback.from_user)
         rows = await get_inventory(session, user.id)
     if not rows:
-        text = "📦 <b>Мои предметы</b>
-
-Инвентарь пока пуст."
+        text = "📦 <b>Мои предметы</b>\n\nИнвентарь пока пуст."
     else:
         lines = ["📦 <b>Мои предметы</b>", ""]
         for inventory, item in rows:
             lines.append(f"{item.name} × <b>{inventory.quantity}</b>")
-        text = "
-".join(lines)
+        text = "\n".join(lines)
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🛒 В магазин", callback_data="shop")]
     ])
     await callback.message.edit_text(text, reply_markup=markup)
     await callback.answer()
-
 
 @router.callback_query(F.data.startswith("shop_buy:"))
 async def shop_buy_callback(callback: CallbackQuery) -> None:
