@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import desc, func, select
@@ -83,6 +83,7 @@ async def change_balance(
         return await get_balance(session, user_id)
 
     account = await get_or_create_economy(session, user_id)
+    await session.refresh(account, with_for_update=True)
     new_balance = account.balance + amount
     if new_balance < 0:
         raise ValueError("insufficient_funds")
@@ -108,6 +109,7 @@ async def change_balance(
 async def claim_daily(session: AsyncSession, user_id: int, now: datetime | None = None) -> DailyResult:
     now = now or datetime.now(timezone.utc)
     account = await get_or_create_economy(session, user_id)
+    await session.refresh(account, with_for_update=True)
 
     if account.last_daily_claim_at is not None:
         last = account.last_daily_claim_at
@@ -238,7 +240,7 @@ async def purchase_item(session: AsyncSession, user_id: int, item_id: int) -> tu
     if balance < item.price:
         raise ValueError("insufficient_funds")
 
-    await change_balance(session, user_id, -item.price, "shop_purchase", item_id=item.id)
+    new_balance = await change_balance(session, user_id, -item.price, "shop_purchase", item_id=item.id)
     result = await session.execute(
         select(UserInventory).where(
             UserInventory.user_id == user_id,
@@ -253,7 +255,7 @@ async def purchase_item(session: AsyncSession, user_id: int, item_id: int) -> tu
         inventory.quantity += 1
     await session.flush()
     await session.commit()
-    return item, inventory, balance - item.price
+    return item, inventory, new_balance
 
 
 async def gift_item(
@@ -272,7 +274,7 @@ async def gift_item(
     if balance < item.price:
         raise ValueError("insufficient_funds")
 
-    await change_balance(
+    new_balance = await change_balance(
         session, sender_id, -item.price, "gift_sent",
         reference_user_id=recipient_id, item_id=item.id,
     )
@@ -297,4 +299,4 @@ async def gift_item(
         item_id=item.id,
     ))
     await session.commit()
-    return item, balance - item.price
+    return item, new_balance
