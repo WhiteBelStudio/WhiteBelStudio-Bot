@@ -18,6 +18,7 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    ErrorEvent,
     Message,
 )
 
@@ -38,8 +39,32 @@ from app.services.users import format_user_profile, sync_telegram_user
 load_dotenv()
 
 
+# Centralized fallback: individual handlers keep user-facing domain errors local;
+# this catches unexpected exceptions so one update cannot terminate polling.
+def _log_unhandled_error(event: ErrorEvent) -> None:
+    print(f"[error] unhandled update error: {event.exception!r}", flush=True)
+
+
 dp = Dispatcher()
 dp.message.middleware(ChatReputationMiddleware())
+
+
+@dp.error()
+async def global_error_handler(event: ErrorEvent) -> bool:
+    _log_unhandled_error(event)
+    update = event.update
+    if isinstance(update, CallbackQuery):
+        try:
+            await update.answer("⚠️ Произошла ошибка. Попробуй ещё раз.", show_alert=True)
+        except Exception as exc:
+            print(f"[error] callback error notification failed: {exc!r}", flush=True)
+    elif isinstance(update, Message):
+        try:
+            await update.answer("⚠️ Произошла ошибка. Попробуй ещё раз.")
+        except Exception as exc:
+            print(f"[error] message error notification failed: {exc!r}", flush=True)
+    return True
+
 dp.include_router(economy_router)
 dp.include_router(achievements_router)
 dp.include_router(games_router)
