@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from app.db.engine import get_session
 from app.services.economy import claim_daily, get_balance, gift_item, list_shop_items, list_transactions, purchase_item
-from app.services.shop import get_inventory, get_user_by_username_for_gift
+from app.services.shop import ensure_shop_catalog, get_inventory, get_user_by_username_for_gift
 from app.services.users import sync_telegram_user
 
 router = Router(name="economy")
@@ -49,9 +49,12 @@ async def show_shop(message: Message, category: str | None = None, *, edit: bool
         return
     async for session in get_session():
         user, _ = await sync_telegram_user(session, message.from_user)
+        await ensure_shop_catalog(session)
         balance = await get_balance(session, user.id)
         items = await list_shop_items(session, category)
 
+    if category and category not in CATEGORY_NAMES:
+        category = None
     if category:
         title = CATEGORY_NAMES.get(category, "🛒 Магазин")
         lines = [f"🛒 <b>{title}</b>", "", f"🪙 Баланс: <b>{balance:.1f}</b>", ""]
