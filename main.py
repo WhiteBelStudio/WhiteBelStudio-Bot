@@ -25,6 +25,7 @@ from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
 from app.bot.middleware import ChatReputationMiddleware
 from app.bot.economy import router as economy_router
+from app.bot.achievements import router as achievements_router
 from app.services.community import (
     format_community_reputation,
     get_reputation_history,
@@ -33,6 +34,7 @@ from app.services.community import (
 )
 from app.services.games import get_game_leaderboard, get_game_profile, record_game_result
 from app.services.economy import award_game_coins
+from app.services.achievements import check_and_unlock_achievements
 from app.services.minigames import cancel_game, check_answer, game_catalog_text, get_game, start_game
 from app.services.pvp import PVP_KINDS, accept_challenge, create_challenge, decline_challenge, get_active_match, get_display_name, submit_answer
 from app.services.social import (
@@ -53,6 +55,7 @@ load_dotenv()
 dp = Dispatcher()
 dp.message.middleware(ChatReputationMiddleware())
 dp.include_router(economy_router)
+dp.include_router(achievements_router)
 
 
 
@@ -465,10 +468,12 @@ async def mini_game_answer_handler(message: Message) -> None:
                 elif status == "finished":
                     if match.status == "draw":
                         await record_game_result(session, user.id, result="draw", experience=20)
+                        await check_and_unlock_achievements(session, user.id)
                         coins = await award_game_coins(session, user.id, game_kind="pvp", result="draw")
                         other_id = match.opponent_id if match.creator_id == user.id else match.creator_id
                         if other_id is not None:
                             await record_game_result(session, other_id, result="draw", experience=20)
+                            await check_and_unlock_achievements(session, other_id)
                             await award_game_coins(session, other_id, game_kind="pvp", result="draw")
                         await message.answer(
                             f"🤝 <b>Ничья!</b> Оба игрока ответили одинаково.\\n"
@@ -478,6 +483,7 @@ async def mini_game_answer_handler(message: Message) -> None:
                         winner = await get_display_name(session, match.winner_id)
                         if match.winner_id == user.id:
                             await record_game_result(session, user.id, result="win", experience=50)
+                            await check_and_unlock_achievements(session, user.id)
                             coins = await award_game_coins(session, user.id, game_kind="pvp", result="win")
                             await message.answer(
                                 f"🏆 <b>Ты победил!</b>\\n✨ +50 XP\\n🪙 +{coins:.1f} монет"
@@ -485,10 +491,12 @@ async def mini_game_answer_handler(message: Message) -> None:
                             loser_id = match.opponent_id if match.creator_id == user.id else match.creator_id
                             if loser_id is not None:
                                 await record_game_result(session, loser_id, result="loss", experience=10)
+                                await check_and_unlock_achievements(session, loser_id)
                                 await award_game_coins(session, loser_id, game_kind="pvp", result="loss")
                         else:
                             await message.answer(f"🏁 <b>Соревнование завершено.</b>\\nПобедитель: {winner}")
                             await record_game_result(session, user.id, result="loss", experience=10)
+                            await check_and_unlock_achievements(session, user.id)
                             coins = await award_game_coins(session, user.id, game_kind="pvp", result="loss")
                             await message.answer(f"🪙 Награда за участие: +{coins:.1f} монет")
                 elif status == "expired":
@@ -530,6 +538,7 @@ async def mini_game_answer_handler(message: Message) -> None:
         try:
             async for session in get_session():
                 await record_game_result(session, message.from_user.id, result="win", experience=xp)
+                await check_and_unlock_achievements(session, message.from_user.id)
                 coins = await award_game_coins(
                     session, message.from_user.id, game_kind=finished_game.kind, result="win"
                 )
@@ -549,6 +558,7 @@ async def mini_game_answer_handler(message: Message) -> None:
         try:
             async for session in get_session():
                 await record_game_result(session, message.from_user.id, result="loss", experience=10)
+                await check_and_unlock_achievements(session, message.from_user.id)
                 coins = await award_game_coins(
                     session, message.from_user.id, game_kind=finished_game.kind, result="loss"
                 )
@@ -817,6 +827,7 @@ async def setup_bot_commands(bot: Bot) -> None:
             BotCommand(command="help", description="Помощь"),
             BotCommand(command="game", description="Игровой профиль"),
             BotCommand(command="gametop", description="Топ игроков"),
+            BotCommand(command="achievements", description="Мои достижения"),
             BotCommand(command="games", description="Мини-игры"),
             BotCommand(command="balance", description="Баланс монет"),
             BotCommand(command="daily", description="Ежедневная награда"),
