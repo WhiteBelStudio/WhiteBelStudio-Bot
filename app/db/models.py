@@ -44,26 +44,6 @@ class UserSettings(Base):
     user: Mapped[User] = relationship(back_populates="settings")
 
 
-class FriendRequest(Base):
-    __tablename__ = "friend_requests"
-    __table_args__ = (UniqueConstraint("sender_id", "recipient_id", name="uq_friend_request_pair"),)
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    sender_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    recipient_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-
-class Friendship(Base):
-    __tablename__ = "friendships"
-    __table_args__ = (UniqueConstraint("user_low_id", "user_high_id", name="uq_friendship_pair"),)
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_low_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_high_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-
 class Conversation(Base):
     __tablename__ = "conversations"
     __table_args__ = (UniqueConstraint("user_low_id", "user_high_id", name="uq_conversation_pair"),)
