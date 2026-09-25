@@ -4,7 +4,7 @@ from aiogram.types import User as TelegramUser
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import User
-from app.db.repositories import get_user_by_username as repository_get_user_by_username, sync_user
+from app.db.repositories import get_user_by_telegram_id as repository_get_user_by_telegram_id, get_user_by_username as repository_get_user_by_username, sync_user
 
 
 async def sync_telegram_user(
@@ -20,6 +20,10 @@ async def sync_telegram_user(
         language_code=telegram_user.language_code,
         is_bot=telegram_user.is_bot,
     )
+
+
+async def get_user_by_telegram_id(session: AsyncSession, telegram_id: int) -> User | None:
+    return await repository_get_user_by_telegram_id(session, telegram_id)
 
 
 def format_user_profile(user: User) -> str:
