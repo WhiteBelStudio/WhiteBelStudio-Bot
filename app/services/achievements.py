@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models import Achievement, CoinTransaction, Conversation, EconomyAccount, Friendship, GameProfile, MessageRecord, PvpMatch, ReputationEvent, CommunityReputationVote, UserAchievement
+from app.db.models import Achievement, CoinTransaction, Conversation, EconomyAccount, GameProfile, MessageRecord, PvpMatch, ReputationEvent, CommunityReputationVote, UserAchievement
 
 @dataclass(frozen=True, slots=True)
 class AchievementSpec:
@@ -150,7 +150,7 @@ async def _metrics(session: AsyncSession,user_id:int)->dict[str,int]:
 
 def _unlocked(s:AchievementSpec,m:dict[str,int])->bool:
     if s.metric in m: return m[s.metric]>=s.target
-    return {"multi_games_wins":m["games"]>=3 and m["wins"]>=1,"social_gamer":m["games"]>=10 and m["friends"]>=1,"gamer_rep":m["games"]>=25 and m["reputation"]>=10,"rich_gamer":m["games"]>=50 and m["balance"]>=500,"pvp_social":m["pvp_matches"]>=1 and m["friends"]>=3}.get(s.metric,False)
+    return {"multi_games_wins":m["games"]>=3 and m["wins"]>=1,"rich_gamer":m["games"]>=50 and m["balance"]>=500}.get(s.metric,False)
 
 async def check_and_unlock_achievements(session:AsyncSession,user_id:int)->list[AchievementSpec]:
     await ensure_achievements(session); m=await _metrics(session,user_id)
