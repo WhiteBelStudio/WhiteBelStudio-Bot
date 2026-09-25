@@ -193,13 +193,8 @@ async def shop_buy_callback(callback: CallbackQuery) -> None:
             user, _ = await sync_telegram_user(session, callback.from_user)
             item, _, new_balance = await purchase_item(session, user.id, item_id)
         await callback.message.edit_text(
-            f"✅ <b>Покупка выполнена!</b>
-
-"
-            f"{item.name}
-{item.description}
-
-"
+            f"✅ <b>Покупка выполнена!</b>\n\n"
+            f"{item.name}\n{item.description}\n\n"
             f"🪙 Остаток: <b>{new_balance:.1f}</b>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🛒 Вернуться в магазин", callback_data="shop")]
