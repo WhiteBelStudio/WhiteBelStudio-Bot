@@ -8,7 +8,11 @@ from aiogram.types import CallbackQuery, Chat, Message, Update, User
 
 from app.bot.economy import router as economy_router
 from app.bot.games import router as games_router
-from main import dp
+from app.bot.core import router as core_router
+from app.bot.runtime import build_dispatcher
+
+
+dp = build_dispatcher()
 
 
 pytestmark = pytest.mark.asyncio
@@ -54,11 +58,11 @@ async def _feed(data: str, *, telegram_id: int = 910000201) -> CallbackQuery:
 
 async def test_menu_callbacks_are_dispatched_end_to_end() -> None:
     with (
-        patch("main.profile_handler", new=AsyncMock()) as profile,
-        patch("main.rep_handler", new=AsyncMock()) as reputation,
-        patch("main.rules_handler", new=AsyncMock()) as rules,
+        patch("app.bot.core.profile_handler", new=AsyncMock()) as profile,
+        patch("app.bot.core.rep_handler", new=AsyncMock()) as reputation,
+        patch("app.bot.core.rules_handler", new=AsyncMock()) as rules,
         patch("app.bot.economy.show_shop", new=AsyncMock()) as shop,
-        patch("main.show_help_categories", new=AsyncMock()) as help_menu,
+        patch("app.bot.core.show_help_categories", new=AsyncMock()) as help_menu,
         patch.object(CallbackQuery, "answer", new=AsyncMock()) as answer,
     ):
         callbacks = await _feed("menu_profile")
@@ -88,7 +92,7 @@ async def test_help_callbacks_are_dispatched_end_to_end(
     expected_category: str,
 ) -> None:
     with (
-        patch("main.show_help_category", new=AsyncMock()) as handler,
+        patch("app.bot.core.show_help_category", new=AsyncMock()) as handler,
         patch.object(CallbackQuery, "answer", new=AsyncMock()) as answer,
     ):
         await _feed(data)
