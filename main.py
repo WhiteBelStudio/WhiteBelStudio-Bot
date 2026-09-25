@@ -53,14 +53,16 @@ dp.message.middleware(ChatReputationMiddleware())
 async def global_error_handler(event: ErrorEvent) -> bool:
     _log_unhandled_error(event)
     update = event.update
-    if isinstance(update, CallbackQuery):
+    callback = update.callback_query
+    message = update.message or update.edited_message
+    if callback is not None:
         try:
-            await update.answer("⚠️ Произошла ошибка. Попробуй ещё раз.", show_alert=True)
+            await callback.answer("⚠️ Произошла ошибка. Попробуй ещё раз.", show_alert=True)
         except Exception as exc:
             print(f"[error] callback error notification failed: {exc!r}", flush=True)
-    elif isinstance(update, Message):
+    elif message is not None:
         try:
-            await update.answer("⚠️ Произошла ошибка. Попробуй ещё раз.")
+            await message.answer("⚠️ Произошла ошибка. Попробуй ещё раз.")
         except Exception as exc:
             print(f"[error] message error notification failed: {exc!r}", flush=True)
     return True
