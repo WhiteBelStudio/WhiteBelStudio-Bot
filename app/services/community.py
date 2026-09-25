@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func, select
+from sqlalchemy import ForeignKey, Integer, String, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,8 +31,8 @@ async def get_reputation_vote_stats(
 ) -> tuple[int, int, int]:
     query = select(
         func.count(CommunityReputationVote.id),
-        func.coalesce(func.sum(func.case((CommunityReputationVote.score == 1, 1), else_=0)), 0),
-        func.coalesce(func.sum(func.case((CommunityReputationVote.score == -1, 1), else_=0)), 0),
+        func.coalesce(func.sum(case((CommunityReputationVote.score == 1, 1), else_=0)), 0),
+        func.coalesce(func.sum(case((CommunityReputationVote.score == -1, 1), else_=0)), 0),
     ).where(CommunityReputationVote.rated_id == user_id)
     if chat_id is not None:
         query = query.where(CommunityReputationVote.chat_id == chat_id)
@@ -183,7 +183,12 @@ def reputation_level(score: int) -> tuple[str, int, int]:
     return "Под наблюдением", score, 0
 
 
-def format_community_reputation(name: str, score: int, history: list[ReputationEvent], stats: tuple[int, int, int] | None = None) -> str:
+def format_community_reputation(
+    name: str,
+    score: int,
+    history: list[ReputationEvent],
+    stats: tuple[int, int, int] | None = None,
+) -> str:
     level, current_threshold, next_threshold = reputation_level(score)
     lines = [
         f"⭐ <b>Репутация {name}</b>",
