@@ -1,0 +1,53 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Production • Pterodactyl restart
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.event == 'push') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate deployment configuration
+        env:
+          PANEL_URL: ${{ secrets.PTERODACTYL_PANEL_URL }}
+          API_KEY: ${{ secrets.PTERODACTYL_API_KEY }}
+          SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
+        run: |
+          test -n "$PANEL_URL" || { echo "::error::PTERODACTYL_PANEL_URL is not configured"; exit 1; }
+          test -n "$API_KEY" || { echo "::error::PTERODACTYL_API_KEY is not configured"; exit 1; }
+          test -n "$SERVER_ID" || { echo "::error::PTERODACTYL_SERVER_ID is not configured"; exit 1; }
+
+      - name: Restart production server
+        env:
+          PANEL_URL: ${{ secrets.PTERODACTYL_PANEL_URL }}
+          API_KEY: ${{ secrets.PTERODACTYL_API_KEY }}
+          SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --url "${PANEL_URL%/}/api/client/servers/$SERVER_ID/power" \
+            --header "Authorization: Bearer $API_KEY" \
+            --header "Content-Type: application/json" \
+            --data '{"signal":"restart"}'
+
+      - name: Deployment summary
+        env:
+          SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
+        run: echo "Production restart requested for Pterodactyl server $SERVER_ID"
