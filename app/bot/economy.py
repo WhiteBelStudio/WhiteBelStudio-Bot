@@ -257,18 +257,11 @@ async def economy_handler(message: Message) -> None:
     if message.from_user is None:
         return
     await message.answer(
-        "🪙 <b>Экономика</b>
-
-"
-        "/balance — баланс
-"
-        "/daily — ежедневная награда
-"
-        "/shop — магазин
-"
-        "/inventory — мои предметы
-"
-        "/coinhistory — история монет
-"
+        "🪙 <b>Экономика</b>\n\n"
+        "/balance — баланс\n"
+        "/daily — ежедневная награда\n"
+        "/shop — магазин\n"
+        "/inventory — мои предметы\n"
+        "/coinhistory — история монет\n"
         "/gift @username ID — подарить подарок"
     )
