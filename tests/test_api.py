@@ -175,3 +175,27 @@ async def test_mini_app_resolves_existing_chat_user(monkeypatch: pytest.MonkeyPa
     assert body["id"] == 7
     assert body["telegram_id"] == 123456789
     assert body["username"] == "test"
+
+
+@pytest.mark.asyncio
+async def test_business_api_requires_mini_app_auth() -> None:
+    protected_paths = (
+        "/api/v1/me",
+        "/api/v1/economy",
+        "/api/v1/economy/transactions",
+        "/api/v1/games/profile",
+        "/api/v1/reputation",
+        "/api/v1/achievements",
+        "/api/v1/achievements/progress",
+        "/api/v1/shop/items",
+        "/api/v1/shop/inventory",
+        "/api/v1/conversations/1/messages",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        for path in protected_paths:
+            response = await client.get(path)
+            assert response.status_code == 401, path
