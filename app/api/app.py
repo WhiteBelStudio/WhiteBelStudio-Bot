@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.services.health import check_readiness
+from app.api.routes import router as api_router
 
 
 @asynccontextmanager
@@ -69,3 +70,6 @@ async def readiness() -> dict[str, str]:
 @app.get("/api/v1/health", tags=["health"])
 async def api_health() -> dict[str, str]:
     return {"status": "ok", "version": app.version}
+
+
+app.include_router(api_router)
