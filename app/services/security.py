@@ -10,6 +10,10 @@ from urllib.parse import parse_qsl
 
 from aiogram.types import User as TelegramUser
 
+from app.db.engine import get_session
+from app.db.models import User
+from app.services.users import get_user_by_telegram_id
+
 
 class TelegramInitDataError(ValueError):
     """Raised when Telegram Mini App initData is invalid."""
@@ -76,3 +80,15 @@ def validate_telegram_init_data(
         auth_date=auth_date,
         query_id=values.get("query_id"),
     )
+
+
+async def authenticate_telegram_init_data(init_data: str) -> User:
+    payload = validate_telegram_init_data(init_data)
+    async for session in get_session():
+        user = await get_user_by_telegram_id(session, payload.user.id)
+        if user is None:
+            raise TelegramInitDataError("Telegram user is not registered")
+        if user.is_bot or not user.is_active:
+            raise TelegramInitDataError("User is not allowed")
+        return user
+    raise TelegramInitDataError("Authentication failed")
