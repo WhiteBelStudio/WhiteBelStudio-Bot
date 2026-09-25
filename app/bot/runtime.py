@@ -26,20 +26,33 @@ def build_dispatcher() -> Dispatcher:
 
     @dp.error()
     async def global_error_handler(event: ErrorEvent) -> bool:
-        LOGGER.exception("unhandled_update_error", exc_info=event.exception)
+        exception = event.exception
+        LOGGER.error(
+            "unhandled_update_error",
+            exc_info=(type(exception), exception, exception.__traceback__),
+        )
         update = event.update
         callback = update.callback_query
         message = update.message or update.edited_message
         if callback is not None:
             try:
-                await callback.answer("⚠️ Произошла ошибка. Попробуй ещё раз.", show_alert=True)
+                await callback.answer(
+                    "⚠️ Произошла ошибка. Попробуй ещё раз.",
+                    show_alert=True,
+                )
             except Exception as exc:
-                LOGGER.exception("callback_error_notification_failed", exc_info=exc)
+                LOGGER.error(
+                    "callback_error_notification_failed",
+                    exc_info=(type(exc), exc, exc.__traceback__),
+                )
         elif message is not None:
             try:
                 await message.answer("⚠️ Произошла ошибка. Попробуй ещё раз.")
             except Exception as exc:
-                LOGGER.exception("message_error_notification_failed", exc_info=exc)
+                LOGGER.error(
+                    "message_error_notification_failed",
+                    exc_info=(type(exc), exc, exc.__traceback__),
+                )
         return True
 
     dp.include_router(core_router)
