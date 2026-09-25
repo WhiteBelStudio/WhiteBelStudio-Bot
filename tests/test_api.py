@@ -67,3 +67,27 @@ async def test_readiness_returns_migration_revision() -> None:
         "database": "ok",
         "revision": "0015",
     }
+
+
+@pytest.mark.asyncio
+async def test_mini_app_valid_init_data_reaches_user_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    token = "123456:TEST"
+    monkeypatch.setenv("BOT_TOKEN", token)
+    fake_user = TelegramUser(id=123456789, is_bot=False, first_name="Test", username="test")
+
+    async def override():
+        return fake_user
+
+    from app.api.dependencies import get_current_telegram_user
+    app.dependency_overrides[get_current_telegram_user] = override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                "/api/v1/me",
+                headers={"X-Telegram-Init-Data": _init_data(bot_token=token)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["telegram_id"] == 123456789
