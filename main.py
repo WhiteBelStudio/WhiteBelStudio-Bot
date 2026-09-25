@@ -12,6 +12,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
+import uvicorn
+
+from app.api.app import app as api_app
 from aiogram.types import (
     BotCommand,
     BotCommandScopeDefault,
@@ -331,6 +334,21 @@ async def setup_bot_commands(bot: Bot) -> None:
     )
 
 
+async def run_api() -> None:
+    host = os.getenv("API_HOST", "0.0.0.0").strip() or "0.0.0.0"
+    port = int(os.getenv("API_PORT", "8080"))
+    config = uvicorn.Config(
+        api_app,
+        host=host,
+        port=port,
+        log_level=os.getenv("LOG_LEVEL", "info").lower(),
+        access_log=True,
+    )
+    server = uvicorn.Server(config)
+    print(f"[api] Starting FastAPI on {host}:{port}", flush=True)
+    await server.serve()
+
+
 async def main() -> None:
     token = os.environ.get("BOT_TOKEN", "").strip()
     if not token:
@@ -363,7 +381,10 @@ async def main() -> None:
         await setup_bot_commands(bot)
         print("[bot] Command menu: configured", flush=True)
         print("[bot] Starting polling...", flush=True)
-        await dp.start_polling(bot)
+        await asyncio.gather(
+            dp.start_polling(bot),
+            run_api(),
+        )
     finally:
         await close_db()
         await bot.session.close()
