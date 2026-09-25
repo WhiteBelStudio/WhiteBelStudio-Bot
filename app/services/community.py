@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func, select
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,20 @@ async def get_reputation_score(session: AsyncSession, user_id: int, chat_id: int
         query = query.where(ReputationEvent.chat_id == chat_id)
     result = await session.execute(query)
     return int(result.scalar_one() or 0)
+
+
+async def get_reputation_vote_stats(
+    session: AsyncSession, user_id: int, chat_id: int | None = None
+) -> tuple[int, int, int]:
+    query = select(
+        func.count(CommunityReputationVote.id),
+        func.coalesce(func.sum(func.case((CommunityReputationVote.score == 1, 1), else_=0)), 0),
+        func.coalesce(func.sum(func.case((CommunityReputationVote.score == -1, 1), else_=0)), 0),
+    ).where(CommunityReputationVote.rated_id == user_id)
+    if chat_id is not None:
+        query = query.where(CommunityReputationVote.chat_id == chat_id)
+    total, positive, negative = (await session.execute(query)).one()
+    return int(total or 0), int(positive or 0), int(negative or 0)
 
 
 async def add_reputation_event(
@@ -64,9 +78,7 @@ async def set_chat_reputation_vote(
     if score not in (-1, 1):
         raise ValueError("score must be -1 or 1")
 
-    users_result = await session.execute(
-        select(User).where(User.id.in_([rater_id, rated_id]))
-    )
+    users_result = await session.execute(select(User).where(User.id.in_([rater_id, rated_id])))
     users = {user.id: user for user in users_result.scalars().all()}
     rater = users.get(rater_id)
     rated = users.get(rated_id)
@@ -156,28 +168,41 @@ async def get_reputation_top(
     ]
 
 
-def reputation_level(score: int) -> tuple[str, int]:
+def reputation_level(score: int) -> tuple[str, int, int]:
+    """Return (title, current_threshold, next_threshold)."""
     if score >= 100:
-        return "Легенда", 100
+        return "Легенда", 100, 100
     if score >= 50:
-        return "Авторитет", 100
+        return "Авторитет", 50, 100
     if score >= 25:
-        return "Активный участник", 50
+        return "Активный участник", 25, 50
     if score >= 10:
-        return "Участник", 25
+        return "Участник", 10, 25
     if score >= 0:
-        return "Новичок", 10
-    return "Под наблюдением", 0
+        return "Новичок", 0, 10
+    return "Под наблюдением", score, 0
 
 
-def format_community_reputation(name: str, score: int, history: list[ReputationEvent]) -> str:
-    level, next_threshold = reputation_level(score)
-    lines = [f"⭐ <b>Репутация {name}</b>", f"Баланс: <b>{score}</b>", f"Уровень: <b>{level}</b>"]
+def format_community_reputation(name: str, score: int, history: list[ReputationEvent], stats: tuple[int, int, int] | None = None) -> str:
+    level, current_threshold, next_threshold = reputation_level(score)
+    lines = [
+        f"⭐ <b>Репутация {name}</b>",
+        f"📊 Баланс: <b>{score:+d}</b>",
+        f"🏅 Уровень: <b>{level}</b>",
+    ]
+    if stats is not None:
+        total, positive, negative = stats
+        lines.append(f"👍 +{positive}  |  👎 -{negative}  |  Всего оценок: {total}")
     if next_threshold > score:
-        lines.append(f"До следующего уровня: <b>{next_threshold - score}</b>")
+        progress = max(0, score - current_threshold)
+        required = max(1, next_threshold - current_threshold)
+        lines.append(f"📈 До следующего уровня: <b>{next_threshold - score}</b>")
+        lines.append(f"Прогресс: <b>{progress}/{required}</b>")
+    elif score >= 100:
+        lines.append("👑 Максимальный уровень достигнут")
     if history:
-        lines.extend(["", "Последние изменения:"])
-        for event in history:
+        lines.extend(["", "🕘 <b>Последние изменения</b>"])
+        for event in history[:10]:
             sign = "+" if event.delta > 0 else ""
             lines.append(f"• {sign}{event.delta} — {event.reason}")
     return "\n".join(lines)
