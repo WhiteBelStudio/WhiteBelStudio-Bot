@@ -24,6 +24,7 @@ from aiogram.types import (
 from app.db.engine import close_db, get_session
 from app.db.health import check_database_connection
 from app.bot.middleware import ChatReputationMiddleware
+from app.bot.economy import router as economy_router
 from app.services.community import (
     format_community_reputation,
     get_reputation_history,
@@ -49,6 +50,7 @@ load_dotenv()
 
 dp = Dispatcher()
 dp.message.middleware(ChatReputationMiddleware())
+dp.include_router(economy_router)
 
 
 
@@ -76,6 +78,7 @@ async def start_handler(message: Message) -> None:
             ],
             [
                 InlineKeyboardButton(text="📜 Правила", callback_data="menu_rules"),
+                InlineKeyboardButton(text="🛒 Магазин", callback_data="shop"),
                 InlineKeyboardButton(text="❓ Помощь", callback_data="menu_help"),
             ],
         ]
@@ -109,6 +112,9 @@ async def menu_callback_handler(callback: CallbackQuery) -> None:
         await rep_handler(callback.message)
     elif action == "menu_rules":
         await rules_handler(callback.message)
+    elif action == "shop":
+        from app.bot.economy import show_shop
+        await show_shop(callback.message, edit=True)
     elif action == "menu_help":
         await show_help_categories(callback.message, edit=True)
     elif action == "help_categories":
@@ -146,7 +152,13 @@ HELP_CATEGORIES = {
         "🎮 /game — игровой профиль\n"
         "🏆 /gametop — топ игроков\n"
         "🕹 /games — мини-игры\n"
-        "🛑 /cancelgame — отменить активную мини-игру"
+        "🛑 /cancelgame — отменить активную мини-игру\n\n"
+        "🪙 /balance — баланс монет\n"
+        "🎁 /daily — ежедневная награда\n"
+        "🛒 /shop — магазин\n"
+        "📦 /inventory — мои предметы\n"
+        "📜 /coinhistory — история монет\n"
+        "🎁 /gift @username ID — подарить подарок"
     ),
     "moderation": (
         "🛡 <b>Модерация</b>\n\n"
@@ -643,6 +655,12 @@ async def setup_bot_commands(bot: Bot) -> None:
             BotCommand(command="game", description="Игровой профиль"),
             BotCommand(command="gametop", description="Топ игроков"),
             BotCommand(command="games", description="Мини-игры"),
+            BotCommand(command="balance", description="Баланс монет"),
+            BotCommand(command="daily", description="Ежедневная награда"),
+            BotCommand(command="shop", description="Магазин"),
+            BotCommand(command="inventory", description="Мои предметы"),
+            BotCommand(command="coinhistory", description="История монет"),
+            BotCommand(command="gift", description="Подарить предмет"),
             BotCommand(command="profile", description="Мой профиль"),
             BotCommand(command="rep", description="Моя репутация"),
             BotCommand(command="toprep", description="Топ репутации"),
