@@ -55,9 +55,31 @@ def ensure_git_checkout() -> None:
         )
 
 
+def verify_git_remote() -> None:
+    remote = git("remote", "get-url", "origin", check=False)
+    if remote.returncode != 0 or not remote.stdout.strip():
+        raise RuntimeError("Git remote 'origin' is missing")
+
+    configured = remote.stdout.strip()
+    expected_repo = REPO.removesuffix(".git").lower()
+    normalized = configured.removesuffix(".git").lower()
+
+    allowed = {
+        f"https://github.com/{expected_repo}",
+        f"git@github.com:{expected_repo}",
+        f"ssh://git@github.com/{expected_repo}",
+    }
+    if normalized not in allowed:
+        raise RuntimeError(
+            "Git remote 'origin' does not match GITHUB_REPOSITORY; "
+            "refusing to rewrite the remote or update an unexpected repository"
+        )
+
+
 def update_from_github() -> tuple[str, str]:
     """Fast-forward the deployment checkout to the configured remote branch."""
     ensure_git_checkout()
+    verify_git_remote()
 
     current = git("rev-parse", "HEAD").stdout.strip()
     if not UPDATE_ENABLED:
@@ -65,7 +87,6 @@ def update_from_github() -> tuple[str, str]:
         return current, current
 
     LOGGER.info("github_update_check", extra={"repository": REPO, "branch": BRANCH})
-    git("remote", "set-url", "origin", f"https://github.com/{REPO}.git")
     git("fetch", "--prune", "origin", BRANCH)
     remote = git("rev-parse", f"origin/{BRANCH}").stdout.strip()
 
@@ -202,7 +223,6 @@ def main() -> None:
             LOGGER.error("code_rollback_skipped_after_migration")
         raise
     finally:
-        # close_db is harmless before the main process starts and releases failed-start resources.
         try:
             asyncio.run(close_db())
         except Exception:
