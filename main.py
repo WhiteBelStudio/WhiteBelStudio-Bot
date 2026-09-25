@@ -260,7 +260,6 @@ def mini_games_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="🔤 Шифровальщик", callback_data="mini_start:word"),
-                InlineKeyboardButton(text="🧠 Память", callback_data="mini_start:memory"),
             ],
             [
                 InlineKeyboardButton(text="🔢 Последовательность", callback_data="mini_start:sequence"),
@@ -316,17 +315,6 @@ async def start_mini_game(message: Message, kind: str) -> None:
             "Отправь ответ обычным сообщением.",
             reply_markup=mini_back_keyboard(),
         )
-        if game.kind == "memory":
-            import asyncio
-            await asyncio.sleep(3)
-            try:
-                await sent.edit_text(
-                    "🧠 <b>Память!</b>\n\n"
-                    "Последовательность скрыта. Теперь введи её целиком.",
-                    reply_markup=mini_back_keyboard(),
-                )
-            except Exception:
-                pass
     except ValueError:
         await message.answer("⚠️ Такая игра пока недоступна.")
 
@@ -372,7 +360,7 @@ async def mini_game_answer_handler(message: Message) -> None:
         return
 
     if status == "win":
-        xp = {"math": 40, "code": 65, "word": 50, "memory": 75, "sequence": 70, "logic": 80, "anagram": 85, "tower": 90, "algorithm": 100, "counter": 80, "space": 95, "quiz": 60, "chain": 55}.get(finished_game.kind, 40)
+        xp = {"math": 40, "code": 65, "word": 50, "sequence": 70, "logic": 80, "anagram": 85, "tower": 90, "algorithm": 100, "counter": 80, "space": 95, "quiz": 60, "chain": 55}.get(finished_game.kind, 40)
         try:
             async for session in get_session():
                 await record_game_result(session, message.from_user.id, result="win", experience=xp)
