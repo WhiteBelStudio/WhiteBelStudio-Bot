@@ -199,3 +199,51 @@ async def test_business_api_requires_mini_app_auth() -> None:
         for path in protected_paths:
             response = await client.get(path)
             assert response.status_code == 401, path
+
+
+@pytest.mark.asyncio
+async def test_request_id_is_returned_and_is_uuid() -> None:
+    from uuid import UUID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/health/live")
+
+    request_id = response.headers["X-Request-ID"]
+    assert UUID(request_id).version == 4
+
+
+@pytest.mark.asyncio
+async def test_request_id_is_preserved_when_valid_uuid_is_supplied() -> None:
+    request_id = "12345678-1234-4234-8234-123456789abc"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/health/live",
+            headers={"X-Request-ID": request_id},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == request_id
+
+
+@pytest.mark.asyncio
+async def test_invalid_request_id_is_replaced() -> None:
+    from uuid import UUID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/health/live",
+            headers={"X-Request-ID": "not-a-uuid"},
+        )
+
+    generated = response.headers["X-Request-ID"]
+    assert UUID(generated).version == 4
