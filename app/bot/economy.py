@@ -126,8 +126,7 @@ async def inventory_handler(message: Message) -> None:
     lines = ["📦 <b>Мои предметы</b>", ""]
     for inventory, item in rows:
         lines.append(f"{item.name} × <b>{inventory.quantity}</b> — {item.description}")
-    await message.answer("
-".join(lines))
+    await message.answer("\n".join(lines))
 
 
 @router.message(Command("coinhistory"))
@@ -144,8 +143,7 @@ async def coin_history_handler(message: Message) -> None:
     for row in rows:
         sign = "+" if row.amount > 0 else ""
         lines.append(f"{sign}{row.amount:.1f} 🪙 · {row.reason}")
-    await message.answer("
-".join(lines))
+    await message.answer("\n".join(lines))
 
 
 @router.callback_query(F.data == "shop")
