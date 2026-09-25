@@ -68,6 +68,7 @@ async def create_challenge(session: AsyncSession, creator_id: int, kind: str) ->
     )
     session.add(match)
     await session.flush()
+    await session.commit()
     return match
 
 
@@ -99,6 +100,7 @@ async def accept_challenge(session: AsyncSession, match_id: int, opponent_id: in
         raise ValueError("active_match")
     match.opponent_id = opponent_id
     match.status = "active"
+    await session.commit()
     return match
 
 
@@ -109,6 +111,7 @@ async def decline_challenge(session: AsyncSession, match_id: int, user_id: int) 
     if match.creator_id == user_id:
         raise ValueError("creator")
     match.status = "declined"
+    await session.commit()
     return match
 
 
@@ -118,6 +121,7 @@ async def submit_answer(session: AsyncSession, match_id: int, user_id: int, valu
         return "unavailable", match
     if match.expires_at <= _now():
         match.status = "expired"
+        await session.commit()
         return "expired", match
     if user_id not in (match.creator_id, match.opponent_id):
         return "forbidden", match
@@ -141,8 +145,10 @@ async def submit_answer(session: AsyncSession, match_id: int, user_id: int, valu
             match.status = "finished"
         else:
             match.status = "draw"
+        await session.commit()
         return "finished", match
 
+    await session.commit()
     return ("correct" if correct else "wrong"), match
 
 
