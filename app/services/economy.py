@@ -184,7 +184,8 @@ async def award_game_coins(
             CoinTransaction.created_at >= day_start,
         )
     )
-    if int(result_count_query.scalar_one() or 0) >= GAME_REWARD_RESULT_LIMIT:
+    result_count = int(result_count_query.scalar_one() or 0)
+    if result_count >= GAME_REWARD_RESULT_LIMIT:
         return Decimal("0.0")
 
     earned_query = await session.execute(
@@ -200,7 +201,7 @@ async def award_game_coins(
         game_kind=game_kind,
         result=result,
         earned_today=earned_today,
-        result_count=int(result_count_query.scalar_one() or 0),
+        result_count=result_count,
     )
     if reward <= 0:
         return Decimal("0.0")
