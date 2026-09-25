@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from fastapi import Header, HTTPException
 
-from app.db.engine import get_session
-from app.services.security import TelegramInitDataError, validate_telegram_init_data
-from app.services.users import get_user_by_telegram_id
+from app.services.security import TelegramInitDataError, authenticate_telegram_init_data
 
 
 async def get_current_telegram_user(
@@ -14,15 +12,7 @@ async def get_current_telegram_user(
         raise HTTPException(status_code=401, detail="Telegram authentication required")
 
     try:
-        payload = validate_telegram_init_data(x_telegram_init_data)
+        return await authenticate_telegram_init_data(x_telegram_init_data)
     except TelegramInitDataError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-
-    async for session in get_session():
-        user = await get_user_by_telegram_id(session, payload.user.id)
-        if user is None:
-            raise HTTPException(status_code=403, detail="Telegram user is not registered")
-        if user.is_bot or not user.is_active:
-            raise HTTPException(status_code=403, detail="User is not allowed")
-
-    return user
+        status_code = 403 if str(exc) in {"Telegram user is not registered", "User is not allowed"} else 401
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
