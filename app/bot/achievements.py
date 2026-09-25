@@ -23,7 +23,6 @@ _METRIC_LABELS = {
     "xp": "✨ XP",
     "messages": "💬 Общение",
     "conversations": "🤝 Диалоги",
-    "friends": "👥 Друзья",
     "reputation": "🛡️ Репутация",
     "rep_voters": "🛡️ Репутация от людей",
     "balance": "💰 Экономика",
