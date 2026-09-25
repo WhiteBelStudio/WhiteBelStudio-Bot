@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.db.health import check_database_connection, check_database_schema
+from app.services.health import check_readiness
 
 
 @asynccontextmanager
@@ -62,8 +62,7 @@ async def liveness() -> dict[str, str]:
 
 @app.get("/health/ready", tags=["health"])
 async def readiness() -> dict[str, str]:
-    await check_database_connection()
-    revision = await check_database_schema()
+    revision = await check_readiness()
     return {"status": "ok", "database": "ok", "revision": revision}
 
 
