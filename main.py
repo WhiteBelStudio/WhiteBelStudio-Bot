@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -26,6 +27,7 @@ from aiogram.types import (
 )
 
 from app.db.engine import close_db, get_session
+from app.logging import configure_logging
 from app.db.health import check_database_connection
 from app.bot.middleware import ChatReputationMiddleware
 from app.bot.economy import router as economy_router
@@ -44,8 +46,11 @@ load_dotenv()
 
 # Centralized fallback: individual handlers keep user-facing domain errors local;
 # this catches unexpected exceptions so one update cannot terminate polling.
+LOGGER = logging.getLogger("bot")
+
+
 def _log_unhandled_error(event: ErrorEvent) -> None:
-    print(f"[error] unhandled update error: {event.exception!r}", flush=True)
+    LOGGER.exception("unhandled_update_error", exc_info=event.exception)
 
 
 dp = Dispatcher()
@@ -62,12 +67,12 @@ async def global_error_handler(event: ErrorEvent) -> bool:
         try:
             await callback.answer("⚠️ Произошла ошибка. Попробуй ещё раз.", show_alert=True)
         except Exception as exc:
-            print(f"[error] callback error notification failed: {exc!r}", flush=True)
+            LOGGER.exception("callback_error_notification_failed", exc_info=exc)
     elif message is not None:
         try:
             await message.answer("⚠️ Произошла ошибка. Попробуй ещё раз.")
         except Exception as exc:
-            print(f"[error] message error notification failed: {exc!r}", flush=True)
+            LOGGER.exception("message_error_notification_failed", exc_info=exc)
     return True
 
 dp.include_router(economy_router)
@@ -87,7 +92,7 @@ async def start_handler(message: Message) -> None:
                 _, created = await sync_telegram_user(session, message.from_user)
             database_ok = True
         except Exception as exc:
-            print(f"[db] user sync failed: {exc}", flush=True)
+            LOGGER.exception("user_sync_failed", exc_info=exc)
 
     suffix = "\n\n🗄 База данных: подключена" if database_ok else ""
     account_status = "🆕 Аккаунт создан" if created else "♻️ Аккаунт обновлён"
@@ -266,7 +271,7 @@ async def rep_handler(message: Message) -> None:
         name = " ".join(p for p in (user.first_name, user.last_name) if p)
         await message.answer(format_community_reputation(name, score, history))
     except Exception as exc:
-        print(f"[reputation] load failed: {exc}", flush=True)
+        LOGGER.exception("reputation_load_failed", exc_info=exc)
         await message.answer("⚠️ Не удалось загрузить репутацию.")
 
 
@@ -285,7 +290,7 @@ async def top_rep_handler(message: Message) -> None:
             lines.append(f"{index}. {name} — <b>{score}</b>")
         await message.answer("\n".join(lines))
     except Exception as exc:
-        print(f"[reputation] top failed: {exc}", flush=True)
+        LOGGER.exception("reputation_top_failed", exc_info=exc)
         await message.answer("⚠️ Не удалось загрузить топ.")
 
 
@@ -305,7 +310,7 @@ async def profile_handler(message: Message) -> None:
             text = format_user_profile(user)
         await message.answer(text)
     except Exception as exc:
-        print(f"[db] profile load failed: {exc}", flush=True)
+        LOGGER.exception("profile_load_failed", exc_info=exc)
         await message.answer("⚠️ Не удалось загрузить профиль. Попробуй ещё раз.")
 
 
@@ -342,14 +347,15 @@ async def run_api() -> None:
         host=host,
         port=port,
         log_level=os.getenv("LOG_LEVEL", "info").lower(),
-        access_log=True,
+        access_log=False,
     )
     server = uvicorn.Server(config)
-    print(f"[api] Starting FastAPI on {host}:{port}", flush=True)
+    LOGGER.info("api_start", extra={"host": host, "port": port})
     await server.serve()
 
 
 async def main() -> None:
+    configure_logging()
     token = os.environ.get("BOT_TOKEN", "").strip()
     if not token:
         raise RuntimeError("BOT_TOKEN is not set in .env")
@@ -363,24 +369,21 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
 
-    print("========================================", flush=True)
-    print(" WhiteBelStudio Bot", flush=True)
-    print("========================================", flush=True)
-    print(f"[bot] Telegram proxy: {'enabled' if proxy else 'disabled'}", flush=True)
+    LOGGER.info("bot_start", extra={"telegram_proxy": bool(proxy)})
 
     if os.getenv("DATABASE_URL", "").strip():
         try:
             await check_database_connection()
-            print("[db] PostgreSQL: OK", flush=True)
+            LOGGER.info("database_connection_ok")
         except Exception as exc:
-            print(f"[db] PostgreSQL: unavailable ({exc})", flush=True)
+            LOGGER.exception("database_connection_unavailable", exc_info=exc)
     else:
-        print("[db] DATABASE_URL: not configured", flush=True)
+        LOGGER.warning("database_url_not_configured")
 
     try:
         await setup_bot_commands(bot)
-        print("[bot] Command menu: configured", flush=True)
-        print("[bot] Starting polling...", flush=True)
+        LOGGER.info("bot_commands_configured")
+        LOGGER.info("bot_polling_start")
         await asyncio.gather(
             dp.start_polling(bot),
             run_api(),
