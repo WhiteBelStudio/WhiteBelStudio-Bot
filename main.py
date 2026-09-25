@@ -32,6 +32,7 @@ from app.services.community import (
     get_reputation_top,
 )
 from app.services.games import get_game_leaderboard, get_game_profile, record_game_result
+from app.services.economy import award_game_coins
 from app.services.minigames import cancel_game, check_answer, game_catalog_text, get_game, start_game
 from app.services.pvp import PVP_KINDS, accept_challenge, create_challenge, decline_challenge, get_active_match, get_display_name, submit_answer
 from app.services.social import (
@@ -467,10 +468,20 @@ async def mini_game_answer_handler(message: Message) -> None:
                     else:
                         winner = await get_display_name(session, match.winner_id)
                         if match.winner_id == user.id:
-                            await message.answer("🏆 <b>Ты победил!</b>\\n✨ +50 XP")
                             await record_game_result(session, user.id, result="win", experience=50)
+                            coins = await award_game_coins(session, user.id, game_kind="pvp", result="win")
+                            await message.answer(
+                                f"🏆 <b>Ты победил!</b>\\n✨ +50 XP\\n🪙 +{coins:.1f} монет"
+                            )
+                            loser_id = match.opponent_id if match.creator_id == user.id else match.creator_id
+                            if loser_id is not None:
+                                await record_game_result(session, loser_id, result="loss", experience=10)
+                                await award_game_coins(session, loser_id, game_kind="pvp", result="loss")
                         else:
                             await message.answer(f"🏁 <b>Соревнование завершено.</b>\\nПобедитель: {winner}")
+                            await record_game_result(session, user.id, result="loss", experience=10)
+                            coins = await award_game_coins(session, user.id, game_kind="pvp", result="loss")
+                            await message.answer(f"🪙 Награда за участие: +{coins:.1f} монет")
                 elif status == "expired":
                     await message.answer("⏱ Соревнование истекло.")
                 return
@@ -510,7 +521,11 @@ async def mini_game_answer_handler(message: Message) -> None:
         try:
             async for session in get_session():
                 await record_game_result(session, message.from_user.id, result="win", experience=xp)
+                coins = await award_game_coins(
+                    session, message.from_user.id, game_kind=finished_game.kind, result="win"
+                )
         except Exception as exc:
+            coins = 0
             print(f"[minigame] win save failed: {exc}", flush=True)
         await message.answer(
             f"🏆 <b>Победа!</b>\n✨ +{xp} XP"
@@ -525,11 +540,15 @@ async def mini_game_answer_handler(message: Message) -> None:
         try:
             async for session in get_session():
                 await record_game_result(session, message.from_user.id, result="loss", experience=10)
+                coins = await award_game_coins(
+                    session, message.from_user.id, game_kind=finished_game.kind, result="loss"
+                )
         except Exception as exc:
+            coins = 0
             print(f"[minigame] loss save failed: {exc}", flush=True)
         await message.answer(
             f"💥 <b>Игра окончена.</b>\nПравильный ответ: <b>{answer}</b>\n"
-            "✨ +10 XP за попытку.",
+            f"✨ +10 XP за попытку.\\n🪙 +{coins:.1f} монет.",
             reply_markup=mini_games_keyboard(),
         )
 
