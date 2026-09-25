@@ -247,3 +247,34 @@ async def test_invalid_request_id_is_replaced() -> None:
 
     generated = response.headers["X-Request-ID"]
     assert UUID(generated).version == 4
+
+
+@pytest.mark.asyncio
+async def test_structured_access_log_contains_request_context(caplog: pytest.LogCaptureFixture) -> None:
+    import json
+    import logging
+
+    caplog.set_level(logging.INFO, logger="app.api.access")
+    request_id = "12345678-1234-4234-8234-123456789abc"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            "/health/live",
+            headers={"X-Request-ID": request_id},
+        )
+
+    assert response.status_code == 200
+    records = [
+        record for record in caplog.records
+        if record.name == "app.api.access" and record.message == "http_request"
+    ]
+    assert records
+    record = records[-1]
+    assert record.request_id == request_id
+    assert record.method == "GET"
+    assert record.path == "/health/live"
+    assert record.status_code == 200
+    assert isinstance(record.duration_ms, float)
