@@ -82,9 +82,18 @@ async def _handle_group_reputation(message: Message) -> bool:
             return True
 
         vote = 1 if command == "/rep+" else -1
-        changed, score = await set_chat_reputation_vote(
-            session, chat.id, actor.id, target_user.id, vote
-        )
+        try:
+            changed, score = await set_chat_reputation_vote(
+                session, chat.id, actor.id, target_user.id, vote
+            )
+        except ValueError as exc:
+            messages = {
+                "rater_not_allowed": "❌ Твой аккаунт не может изменять репутацию.",
+                "rated_not_allowed": "❌ Этому аккаунту нельзя изменять репутацию.",
+                "user_not_found": "❌ Пользователь не найден.",
+            }
+            await message.answer(messages.get(str(exc), "⚠️ Не удалось изменить репутацию."))
+            return True
         if not changed:
             await message.answer("ℹ️ Ты уже поставил такую оценку этому участнику.")
             return True
