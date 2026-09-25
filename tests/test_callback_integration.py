@@ -58,15 +58,16 @@ async def _user_id(session, telegram_id: int) -> int:
     return user.id
 
 
-async def _create_users(session, creator_id: int, opponent_id: int) -> None:
-    await sync_telegram_user(
+async def _create_users(session, creator_id: int, opponent_id: int) -> tuple[int, int]:
+    creator, _ = await sync_telegram_user(
         session,
         User(id=creator_id, is_bot=False, first_name="Creator", username="creator"),
     )
-    await sync_telegram_user(
+    opponent, _ = await sync_telegram_user(
         session,
         User(id=opponent_id, is_bot=False, first_name="Opponent", username="opponent"),
     )
+    return creator.id, opponent.id
 
 
 @pytest.mark.asyncio
@@ -74,27 +75,29 @@ async def test_pvp_callback_create_and_accept_persist_real_postgresql(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("BOT_TOKEN", "123456:INTEGRATION")
-    creator_id = 910000301
-    opponent_id = 910000302
+    creator_tg_id = 910000301
+    opponent_tg_id = 910000302
     bot = Bot("123456:INTEGRATION")
 
-    await _session_call(lambda session: _create_users(session, creator_id, opponent_id))
+    creator_id, opponent_id = await _session_call(
+        lambda session: _create_users(session, creator_tg_id, opponent_tg_id)
+    )
 
     try:
         with (
             patch.object(Message, "answer", new=AsyncMock()) as message_answer,
             patch.object(CallbackQuery, "answer", new=AsyncMock()) as callback_answer,
         ):
-            await dp.feed_update(bot, _update("pvp:create:math", creator_id))
+            await dp.feed_update(bot, _update("pvp:create:math", creator_tg_id))
 
         assert message_answer.await_count >= 1
         callback_answer.assert_awaited_once()
 
-        async def get_creator_match(session):
-            return await get_active_match(session, await _user_id(session, creator_id))
-
-        match = await _session_call(get_creator_match)
+        match = await _session_call(
+            lambda session: get_active_match(session, creator_id)
+        )
         assert match is not None
+        assert match.creator_id == creator_id
         assert match.status == "pending"
         match_id = match.id
 
@@ -104,33 +107,25 @@ async def test_pvp_callback_create_and_accept_persist_real_postgresql(
         ):
             await dp.feed_update(
                 bot,
-                _update(f"pvp:accept:{match_id}", opponent_id),
+                _update(f"pvp:accept:{match_id}", opponent_tg_id),
             )
 
         assert message_answer.await_count >= 1
         callback_answer.assert_awaited_once()
 
-        async def get_opponent_match(session):
-            return await get_active_match(session, await _user_id(session, opponent_id))
-
-        match = await _session_call(get_opponent_match)
+        match = await _session_call(
+            lambda session: get_active_match(session, opponent_id)
+        )
         assert match is not None
         assert match.id == match_id
         assert match.status == "active"
-        assert match.opponent_id == await _user_id_from_session(match, opponent_id)
+        assert match.opponent_id == opponent_id
     finally:
         async for session in get_session():
             await session.execute(
                 delete(DbUser).where(
-                    DbUser.telegram_id.in_([creator_id, opponent_id])
+                    DbUser.telegram_id.in_([creator_tg_id, opponent_tg_id])
                 )
             )
             await session.commit()
         await bot.session.close()
-
-
-async def _user_id_from_session(match, telegram_id: int) -> int:
-    # Kept async so assertions remain independent of SQLAlchemy session lifetime.
-    async for session in get_session():
-        return await _user_id(session, telegram_id)
-    raise AssertionError("database session was not created")
