@@ -8,10 +8,7 @@ from aiogram.types import CallbackQuery, Chat, Message, Update, User
 
 from app.bot.economy import router as economy_router
 from app.bot.games import router as games_router
-from app.bot.runtime import build_dispatcher
-
-
-dp = build_dispatcher()
+from main import dp
 
 
 pytestmark = pytest.mark.asyncio
