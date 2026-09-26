@@ -14,6 +14,7 @@ from app.api.errors import (
     validation_exception_handler,
 )
 from app.api.request_id import RequestIdMiddleware
+from app.api.rate_limit import RateLimitMiddleware
 from app.api.request_logging import RequestLoggingMiddleware
 from app.api.routes import router as api_router
 from app.logging import configure_logging
@@ -49,6 +50,7 @@ app = FastAPI(
     else None,
 )
 
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
