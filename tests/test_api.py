@@ -81,7 +81,7 @@ async def test_readiness_requires_database() -> None:
         new=AsyncMock(side_effect=RuntimeError("database unavailable")),
     ):
         async with AsyncClient(
-            transport=ASGITransport(app=app),
+            transport=ASGITransport(app=app, raise_app_exceptions=False),
             base_url="http://test",
         ) as client:
             response = await client.get("/health/ready")
