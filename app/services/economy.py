@@ -231,6 +231,19 @@ async def list_shop_items(session: AsyncSession, category: str | None = None) ->
     return list(result.scalars().all())
 
 
+async def get_inventory(
+    session: AsyncSession,
+    user_id: int,
+) -> list[tuple[UserInventory, ShopItem]]:
+    result = await session.execute(
+        select(UserInventory, ShopItem)
+        .join(ShopItem, ShopItem.id == UserInventory.item_id)
+        .where(UserInventory.user_id == user_id)
+        .order_by(UserInventory.acquired_at.desc(), UserInventory.id.desc())
+    )
+    return list(result.all())
+
+
 async def purchase_item(session: AsyncSession, user_id: int, item_id: int) -> tuple[ShopItem, UserInventory, Decimal]:
     item = await session.get(ShopItem, item_id, with_for_update=True)
     if item is None or not item.is_active:
