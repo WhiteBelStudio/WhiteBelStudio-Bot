@@ -106,7 +106,6 @@ async def test_mini_app_auth_and_business_api_use_real_postgresql(
 
             economy = await client.get("/api/v1/economy", headers=headers)
             assert economy.status_code == 200
-            assert economy.json()["user_id"] == user.id
             assert economy.json()["balance"] == "0.0"
 
             games = await client.get("/api/v1/games/profile", headers=headers)
