@@ -49,8 +49,6 @@ app = FastAPI(
     else None,
 )
 
-# RequestId must be the outer middleware so the correlation ID remains available
-# while RequestLoggingMiddleware emits its final access event.
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
@@ -90,6 +88,14 @@ async def liveness() -> dict[str, str]:
 async def readiness() -> dict[str, str]:
     revision = await check_readiness()
     return {"status": "ok", "database": "ok", "revision": revision}
+
+
+@app.get("/health/build", tags=["health"])
+async def build_health() -> dict[str, str]:
+    build_sha = os.getenv("APP_BUILD_SHA", "").strip()
+    if not build_sha:
+        raise RuntimeError("APP_BUILD_SHA is not configured")
+    return {"status": "ok", "version": app.version, "build_sha": build_sha}
 
 
 @app.get("/api/v1/health", tags=["health"])
