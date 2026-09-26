@@ -16,25 +16,34 @@ concurrency:
 
 jobs:
   deploy:
-    name: Production • Pterodactyl restart + E2E health
+    name: Production • Pterodactyl restart + full E2E
     if: >-
       ${{ github.event_name == 'workflow_dispatch' ||
           (github.event.workflow_run.conclusion == 'success' &&
            github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
+      - name: Checkout deployment scripts
+        uses: actions/checkout@v4
+
       - name: Validate deployment configuration
         env:
           PANEL_URL: ${{ secrets.PTERODACTYL_PANEL_URL }}
           API_KEY: ${{ secrets.PTERODACTYL_API_KEY }}
           SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
           HEALTH_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
+          E2E_BOT_TOKEN: ${{ secrets.PRODUCTION_E2E_BOT_TOKEN }}
+          E2E_USER_ID: ${{ secrets.PRODUCTION_E2E_TELEGRAM_USER_ID }}
         run: |
+          set -euo pipefail
           test -n "$PANEL_URL" || { echo "::error::PTERODACTYL_PANEL_URL is not configured"; exit 1; }
           test -n "$API_KEY" || { echo "::error::PTERODACTYL_API_KEY is not configured"; exit 1; }
           test -n "$SERVER_ID" || { echo "::error::PTERODACTYL_SERVER_ID is not configured"; exit 1; }
           test -n "$HEALTH_URL" || { echo "::error::PRODUCTION_HEALTHCHECK_URL is not configured"; exit 1; }
+          test -n "$E2E_BOT_TOKEN" || { echo "::error::PRODUCTION_E2E_BOT_TOKEN is not configured"; exit 1; }
+          test -n "$E2E_USER_ID" || { echo "::error::PRODUCTION_E2E_TELEGRAM_USER_ID is not configured"; exit 1; }
+          [[ "$HEALTH_URL" == https://* ]] || { echo "::error::PRODUCTION_HEALTHCHECK_URL must use HTTPS"; exit 1; }
 
       - name: Restart production server
         env:
@@ -42,43 +51,45 @@ jobs:
           API_KEY: ${{ secrets.PTERODACTYL_API_KEY }}
           SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
         run: |
-          curl --fail-with-body --silent --show-error             --request POST             --url "${PANEL_URL%/}/api/client/servers/$SERVER_ID/power"             --header "Authorization: Bearer $API_KEY"             --header "Content-Type: application/json"             --data '{"signal":"restart"}'
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            --request POST \
+            --url "${PANEL_URL%/}/api/client/servers/$SERVER_ID/power" \
+            --header "Authorization: Bearer $API_KEY" \
+            --header "Content-Type: application/json" \
+            --data '{"signal":"restart"}'
 
-      - name: Wait for production health
+      - name: Run production E2E smoke suite
+        env:
+          PRODUCTION_HEALTHCHECK_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
+          PRODUCTION_E2E_BOT_TOKEN: ${{ secrets.PRODUCTION_E2E_BOT_TOKEN }}
+          PRODUCTION_E2E_TELEGRAM_USER_ID: ${{ secrets.PRODUCTION_E2E_TELEGRAM_USER_ID }}
+          E2E_REQUEST_TIMEOUT: "10"
+        run: |
+          set -euo pipefail
+          python scripts/production_e2e.py
+
+      - name: Verify deployed API contract
         env:
           HEALTH_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 30); do
-            echo "Health check attempt $attempt/30"
-            if curl --fail --silent --show-error               --connect-timeout 5               --max-time 10               --retry 0               "$HEALTH_URL" >/tmp/health.json; then
-              cat /tmp/health.json
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "::error::Production health check failed after 150 seconds"
-          exit 1
-
-      - name: Verify liveness endpoint
-        env:
-          HEALTH_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
-        run: |
           base="${HEALTH_URL%/}"
-          curl --fail --silent --show-error --connect-timeout 5 --max-time 10             "$base/health/live" >/tmp/health-live.json
-          cat /tmp/health-live.json
-
-      - name: Verify readiness endpoint
-        env:
-          HEALTH_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
-        run: |
-          base="${HEALTH_URL%/}"
-          curl --fail --silent --show-error --connect-timeout 5 --max-time 10             "$base/health/ready" >/tmp/health-ready.json
-          cat /tmp/health-ready.json
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+            -H 'Accept: application/json' "$base/health/live" >/tmp/health-live.json
+          python - <<'PY'
+          import json
+          with open('/tmp/health-live.json', encoding='utf-8') as f:
+              body = json.load(f)
+          assert body == {'status': 'ok'}, body
+          print('liveness contract: PASS')
+          PY
 
       - name: Deployment summary
         env:
           SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
         run: |
-          echo "Production restart completed and health checks passed."
+          echo "Production restart completed."
+          echo "Production E2E: PASS"
           echo "Pterodactyl server: $SERVER_ID"
