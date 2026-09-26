@@ -4,7 +4,6 @@ import hashlib
 import hmac
 import json
 import os
-import sys
 import time
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
@@ -70,7 +69,8 @@ def build_init_data(bot_token: str, telegram_id: int) -> str:
             separators=(",", ":"),
         ),
     }
-    check_string = "\n".join(f"{key}={value}" for key, value in sorted(values.items()))
+    check_string = "
+".join(f"{key}={value}" for key, value in sorted(values.items()))
     secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
     values["hash"] = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
     return urlencode(values)
@@ -82,11 +82,16 @@ def main() -> None:
     if parsed.scheme != "https" and os.getenv("E2E_ALLOW_HTTP", "false").lower() not in {"1", "true", "yes"}:
         fail("PRODUCTION_HEALTHCHECK_URL must use HTTPS")
 
+    expected_build = os.getenv("EXPECTED_BUILD_SHA", "").strip().lower()
+    if expected_build and (len(expected_build) != 40 or any(char not in "0123456789abcdef" for char in expected_build)):
+        fail("EXPECTED_BUILD_SHA must be a 40-character Git SHA")
+
     probes = (
         Probe("health", "/health", ("status",)),
         Probe("liveness", "/health/live", ("status",)),
         Probe("api-health", "/api/v1/health", ("status", "version")),
         Probe("readiness", "/health/ready", ("status", "database", "revision")),
+        Probe("build", "/health/build", ("status", "version", "build_sha")),
     )
 
     for probe in probes:
@@ -99,26 +104,35 @@ def main() -> None:
             fail("readiness: database is not ready")
         if probe.name == "readiness" and not str(payload.get("revision", "")).strip():
             fail("readiness: migration revision is empty")
+        if probe.name == "build":
+            actual_build = str(payload.get("build_sha", "")).strip().lower()
+            if len(actual_build) != 40:
+                fail("build: server returned an invalid build SHA")
+            if expected_build and actual_build != expected_build:
+                fail(
+                    f"build: expected {expected_build}, "
+                    f"server is running {actual_build}"
+                )
 
-    bot_token = os.getenv("PRODUCTION_E2E_BOT_TOKEN", "").strip()
-    telegram_id = os.getenv("PRODUCTION_E2E_TELEGRAM_USER_ID", "").strip()
-    if bot_token and telegram_id:
-        try:
-            user_id = int(telegram_id)
-        except ValueError:
-            fail("PRODUCTION_E2E_TELEGRAM_USER_ID must be an integer")
-        init_data = build_init_data(bot_token, user_id)
-        status, payload = request_json(
-            base,
-            "/api/v1/me",
-            headers={"X-Telegram-Init-Data": init_data},
-        )
-        assert_status("mini-app-auth", status, payload, 200)
-        if int(payload.get("telegram_id", -1)) != user_id:
-            fail("mini-app-auth: authenticated Telegram ID does not match probe user")
-        print("::notice::mini-app-auth: shared Bot/API identity PASS")
-    else:
-        print("::warning::Mini App authenticated E2E skipped: PRODUCTION_E2E_BOT_TOKEN and PRODUCTION_E2E_TELEGRAM_USER_ID are not both configured")
+    bot_token = env("PRODUCTION_E2E_BOT_TOKEN")
+    telegram_id = env("PRODUCTION_E2E_TELEGRAM_USER_ID")
+    try:
+        user_id = int(telegram_id)
+    except ValueError:
+        fail("PRODUCTION_E2E_TELEGRAM_USER_ID must be an integer")
+    if user_id <= 0:
+        fail("PRODUCTION_E2E_TELEGRAM_USER_ID must be positive")
+
+    init_data = build_init_data(bot_token, user_id)
+    status, payload = request_json(
+        base,
+        "/api/v1/me",
+        headers={"X-Telegram-Init-Data": init_data},
+    )
+    assert_status("mini-app-auth", status, payload, 200)
+    if int(payload.get("telegram_id", -1)) != user_id:
+        fail("mini-app-auth: authenticated Telegram ID does not match probe user")
+    print("::notice::mini-app-auth: shared Bot/API identity PASS")
 
     print("::notice::Production E2E smoke suite: PASS")
 
