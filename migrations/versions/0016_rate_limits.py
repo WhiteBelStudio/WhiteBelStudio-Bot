@@ -38,3 +38,5 @@ def downgrade() -> None:
     op.drop_index("ix_shop_items_category", table_name="shop_items")
     op.drop_index("ix_rate_limit_buckets_window_start", table_name="rate_limit_buckets")
     op.drop_table("rate_limit_buckets")
+    op.drop_constraint("uq_community_chats_telegram_chat_id", "community_chats", type_="unique")
+    op.create_unique_constraint(None, "community_chats", ["telegram_chat_id"])
