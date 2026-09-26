@@ -60,7 +60,7 @@ jobs:
         run: python -c "import main; from app.api.app import app; print(app.title, app.version)"
 
       - name: Unit and API tests
-        run: python -m pytest -q -m 'not integration' --disable-warnings --maxfail=1 --junitxml=unit-tests.xml
+        run: python -m pytest -q -m 'not integration' --disable-warnings --maxfail=3 --junitxml=unit-tests.xml
 
       - name: Dependency audit
         run: pip-audit --requirement requirements.txt --strict --progress-spinner off
