@@ -37,6 +37,8 @@ DB_POOL_RECYCLE=1800
 DB_CONNECT_TIMEOUT=10
 DB_STARTUP_RETRIES=10
 DB_STARTUP_RETRY_DELAY=2
+API_RATE_LIMIT_IP=60
+API_RATE_LIMIT_AUTHENTICATED=120
 ```
 
 Keep secrets only in Pterodactyl environment variables or `.env`. Never commit them.
@@ -137,6 +139,10 @@ The API:
 7. rejects unregistered, inactive, or bot users.
 
 Client-supplied profile fields are not treated as an identity source.
+
+## API rate limiting
+
+Production API requests use shared PostgreSQL-backed fixed-window limits. Unauthenticated traffic is limited by client IP to 60 requests/minute; requests carrying Telegram Mini App initData use a separate 120 requests/minute bucket. Health endpoints are exempt. Exceeded limits return HTTP 429 with `Retry-After` and the standard request ID/error contract.
 
 ## Logs
 
