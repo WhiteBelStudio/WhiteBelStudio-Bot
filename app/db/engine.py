@@ -4,6 +4,7 @@ import os
 from collections.abc import AsyncIterator
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -72,6 +73,8 @@ def configure_engine() -> AsyncEngine:
             "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "30")),
         }
         if database_url.startswith("postgresql+asyncpg://"):
+            if app_env == "test":
+                engine_kwargs["poolclass"] = NullPool
             engine_kwargs["pool_size"] = int(os.getenv("DB_POOL_SIZE", "5"))
             engine_kwargs["max_overflow"] = int(os.getenv("DB_MAX_OVERFLOW", "10"))
             engine_kwargs["connect_args"] = {
