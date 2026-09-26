@@ -1,0 +1,28 @@
+name: Actions Smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actions-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: GitHub Actions runner smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Runner
+        run: |
+          set -euo pipefail
+          echo "GitHub Actions runner is working"
+          python --version
+          test -f .github/workflows/ci.yml
