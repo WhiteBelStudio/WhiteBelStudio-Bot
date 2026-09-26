@@ -63,6 +63,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
           python -m pip install pip-audit
+          python -m pip check
 
       - name: Ruff
         run: python -m ruff check .
@@ -71,11 +72,12 @@ jobs:
         run: python -m compileall -q app main.py start.py tests
 
       - name: Dependency audit
-        run: python -m pip_audit --requirement requirements.txt --strict
+        run: pip-audit --requirement requirements.txt --strict
 
       - name: Migrations
         run: |
           python -m alembic upgrade head
+          python -m alembic current
           python -m alembic check
 
       - name: Unit and API tests
@@ -103,12 +105,17 @@ jobs:
 
       - name: Build source archive
         run: |
+          set -euo pipefail
           mkdir -p dist
           git archive --format=tar.gz --output="dist/whitebelstudio-bot-${{ steps.tag.outputs.value }}.tar.gz" "${{ steps.tag.outputs.value }}"
-          sha256sum dist/* > dist/SHA256SUMS
+          sha256sum dist/*.tar.gz > dist/SHA256SUMS
+          test -s dist/SHA256SUMS
 
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.tag.outputs.value }}"             --generate-notes             --title "${{ steps.tag.outputs.value }}"             dist/*
+          gh release create "${{ steps.tag.outputs.value }}" \
+            --generate-notes \
+            --title "${{ steps.tag.outputs.value }}" \
+            dist/*
