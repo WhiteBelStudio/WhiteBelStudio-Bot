@@ -98,7 +98,7 @@ async def test_pvp_callback_create_and_accept_persist_real_postgresql(
         )
         assert match is not None
         assert match.creator_id == creator_id
-        assert match.status == "pending"
+        assert match.status == "open"
         match_id = match.id
 
         with (
