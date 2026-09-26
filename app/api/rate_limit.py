@@ -5,6 +5,9 @@ import os
 import time
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
+
+from app.api.request_id import get_request_id
 from sqlalchemy import text
 
 from app.db.engine import configure_engine
@@ -66,11 +69,31 @@ async def enforce_rate_limit(request: Request) -> None:
         count = int(result.scalar_one())
 
     if count > limit:
-        from fastapi import HTTPException
-
         retry_after = WINDOW_SECONDS - (int(time.time()) - window)
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded",
-            headers={"Retry-After": str(max(1, retry_after))},
-        )
+        raise RateLimitExceeded(max(1, retry_after))
+
+
+class RateLimitExceeded(Exception):
+    def __init__(self, retry_after: int) -> None:
+        self.retry_after = retry_after
+
+
+class RateLimitMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        from starlette.requests import Request
+        request = Request(scope, receive=receive)
+        try:
+            await enforce_rate_limit(request)
+        except RateLimitExceeded as exc:
+            request_id = get_request_id() or str(scope.get("state", {}).get("request_id", ""))
+            body = {"error": "rate_limit_exceeded", "detail": "Rate limit exceeded", "request_id": request_id, "status_code": 429}
+            response = JSONResponse(body, status_code=429, headers={"Retry-After": str(exc.retry_after)})
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
