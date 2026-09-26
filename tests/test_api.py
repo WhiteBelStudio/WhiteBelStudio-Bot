@@ -319,10 +319,14 @@ async def test_validation_errors_use_unified_shape() -> None:
     )
     try:
         async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        response = await client.get("/api/v1/conversations/not-an-integer/messages")
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.get(
+                "/api/v1/conversations/not-an-integer/messages"
+            )
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 422
     body = response.json()
