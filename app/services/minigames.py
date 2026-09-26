@@ -21,7 +21,10 @@ class MiniGame:
 
     @property
     def expired(self) -> bool:
-        started_at = self.started_at\n        if started_at.tzinfo is None:\n            started_at = started_at.replace(tzinfo=timezone.utc)\n        return datetime.now(timezone.utc) - started_at > timedelta(minutes=5)
+        started_at = self.started_at
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) - started_at > timedelta(minutes=5)
 
     @property
     def difficulty(self) -> str:
