@@ -27,8 +27,12 @@ def upgrade() -> None:
         "rate_limit_buckets",
         ["window_start"],
     )
+    op.create_index("ix_shop_items_category", "shop_items", ["category"])
+    op.create_index("ix_user_inventory_item_id", "user_inventory", ["item_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_user_inventory_item_id", table_name="user_inventory")
+    op.drop_index("ix_shop_items_category", table_name="shop_items")
     op.drop_index("ix_rate_limit_buckets_window_start", table_name="rate_limit_buckets")
     op.drop_table("rate_limit_buckets")
