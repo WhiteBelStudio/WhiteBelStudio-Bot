@@ -100,7 +100,7 @@ async def test_help_callbacks_are_dispatched_end_to_end(
 
 async def test_help_back_callback_is_dispatched_end_to_end() -> None:
     with (
-        patch("main.show_help_categories", new=AsyncMock()) as handler,
+        patch("app.bot.core.show_help_categories", new=AsyncMock()) as handler,
         patch.object(CallbackQuery, "answer", new=AsyncMock()) as answer,
     ):
         await _feed("help_categories")
