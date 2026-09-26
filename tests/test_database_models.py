@@ -14,13 +14,13 @@ def _constraint_names(model: type) -> set[str]:
 
 def test_reputation_constraints_exist() -> None:
     names = _constraint_names(ReputationRating)
-    assert "ck_reputation_rating_score" in names
+    assert "ck_reputation_score_range" in names
     assert "ck_reputation_rating_not_self" in names
 
 
 def test_community_reputation_constraints_exist() -> None:
     names = _constraint_names(CommunityReputationVote)
-    assert "ck_community_rep_vote_score" in names
+    assert "ck_community_reputation_votes_score" in names
     assert "ck_community_rep_vote_not_self" in names
 
 
