@@ -14,6 +14,8 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.drop_constraint("community_chats_telegram_chat_id_key", "community_chats", type_="unique")
+    op.create_unique_constraint("uq_community_chats_telegram_chat_id", "community_chats", ["telegram_chat_id"])
     op.create_table(
         "rate_limit_buckets",
         sa.Column("bucket_key", sa.String(length=255), nullable=False),
