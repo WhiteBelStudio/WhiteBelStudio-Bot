@@ -157,7 +157,7 @@ async def test_mini_app_resolves_existing_chat_user(monkeypatch: pytest.MonkeyPa
     async def override() -> User:
         return user
 
-    from app.api.dependencies import get_current_telegram_user
+    from app.api.dependencies import get_current_telegram_user, get_database_session
 
     app.dependency_overrides[get_current_telegram_user] = override
     try:
@@ -317,6 +317,11 @@ async def test_validation_errors_use_unified_shape() -> None:
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
+
+    async def override_session():
+        yield None
+
+    app.dependency_overrides[get_database_session] = override_session
     try:
         async with AsyncClient(
             transport=ASGITransport(app=app),
