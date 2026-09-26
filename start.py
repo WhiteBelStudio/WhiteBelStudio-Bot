@@ -77,7 +77,7 @@ def verify_git_remote() -> None:
 
 
 def update_from_github() -> tuple[str, str]:
-    """Fast-forward the deployment checkout to the configured remote branch."""
+    """Update the deployment checkout to the configured remote branch."""
     ensure_git_checkout()
     verify_git_remote()
 
@@ -200,10 +200,13 @@ def main() -> None:
 
     try:
         previous_commit, updated_commit = update_from_github()
+        if len(updated_commit) != 40:
+            raise RuntimeError("Updated Git commit SHA is invalid")
+
+        os.environ["APP_BUILD_SHA"] = updated_commit
         install_dependencies()
         health_check()
 
-        # Production migrations are mandatory. Never start against an unknown schema.
         wait_for_database()
         migration_started = True
         run_migrations()
