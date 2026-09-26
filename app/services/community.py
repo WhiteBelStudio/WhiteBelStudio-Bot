@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import ForeignKey, Integer, String, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,7 +111,7 @@ async def set_chat_reputation_vote(
         session.add(vote)
     else:
         vote.score = score
-        vote.updated_at = datetime.utcnow()
+        vote.updated_at = datetime.now(timezone.utc)
 
     delta = score - old_score
     session.add(
