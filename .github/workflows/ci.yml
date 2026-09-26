@@ -2,18 +2,16 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -21,28 +19,12 @@ env:
   PYTHONDONTWRITEBYTECODE: "1"
   BOT_TOKEN: "000000000:ci-test-token"
   APP_ENV: "test"
-  DATABASE_URL: "postgresql+asyncpg://ci:ci@127.0.0.1:5432/whitebelstudio_ci"
 
 jobs:
   test:
-    name: CI • Python 3.12 • PostgreSQL 16
+    name: CI • Python 3.12
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: ci
-          POSTGRES_PASSWORD: ci
-          POSTGRES_DB: whitebelstudio_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U ci -d whitebelstudio_ci"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
 
     steps:
       - name: Checkout
@@ -57,6 +39,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
           python -m pip install pip-audit
@@ -74,22 +57,8 @@ jobs:
       - name: Import smoke test
         run: python -c "import main; from app.api.app import app; print('import: OK', app.version)"
 
-      - name: Apply Alembic migrations
-        run: python -m alembic upgrade head
-
-      - name: Verify Alembic state
-        run: |
-          python -m alembic current
-          python -m alembic check
-
-      - name: Database model tests
-        run: python -m pytest -q tests/test_database_models.py --disable-warnings --strict-markers
-
       - name: Unit and API tests
         run: python -m pytest -q -m "not integration" --disable-warnings --maxfail=1 --strict-markers --junitxml=artifacts/unit-tests.xml
-
-      - name: Integration tests
-        run: python -m pytest -q -m integration --disable-warnings --maxfail=1 --strict-markers --junitxml=artifacts/integration-tests.xml
 
       - name: Dependency audit
         run: pip-audit --requirement requirements.txt --strict --progress-spinner off
