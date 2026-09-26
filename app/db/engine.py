@@ -67,16 +67,16 @@ def configure_engine() -> AsyncEngine:
         if app_env == "production" and not database_url.startswith("postgresql+asyncpg://"):
             raise RuntimeError("Production DATABASE_URL must use PostgreSQL")
 
-        engine_kwargs: dict[str, object] = {
-            "pool_pre_ping": True,
-            "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "1800")),
-            "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "30")),
-        }
+        engine_kwargs: dict[str, object] = {"pool_pre_ping": True}
+        if app_env != "test":
+            engine_kwargs["pool_recycle"] = int(os.getenv("DB_POOL_RECYCLE", "1800"))
+            engine_kwargs["pool_timeout"] = int(os.getenv("DB_POOL_TIMEOUT", "30"))
         if database_url.startswith("postgresql+asyncpg://"):
             if app_env == "test":
                 engine_kwargs["poolclass"] = NullPool
-            engine_kwargs["pool_size"] = int(os.getenv("DB_POOL_SIZE", "5"))
-            engine_kwargs["max_overflow"] = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+            else:
+                engine_kwargs["pool_size"] = int(os.getenv("DB_POOL_SIZE", "5"))
+                engine_kwargs["max_overflow"] = int(os.getenv("DB_MAX_OVERFLOW", "10"))
             engine_kwargs["connect_args"] = {
                 "timeout": float(os.getenv("DB_CONNECT_TIMEOUT", "10"))
             }
