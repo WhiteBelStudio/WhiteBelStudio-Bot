@@ -62,10 +62,17 @@ def test_future_init_data_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_authentication_binds_to_existing_chat_user(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.services import security
+    from app.db.models import User
 
     token = "123456:TEST"
     monkeypatch.setenv("BOT_TOKEN", token)
-    chat_user = object()
+    chat_user = User(
+        id=7,
+        telegram_id=123,
+        first_name="Test",
+        is_bot=False,
+        is_active=True,
+    )
 
     async def fake_get_user_by_telegram_id(session: object, telegram_id: int) -> object:
         assert telegram_id == 123
