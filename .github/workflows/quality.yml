@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-quality-${{ github.ref }}
+  group: ci-quality-${{ github.sha }}
   cancel-in-progress: true
 
 env:
