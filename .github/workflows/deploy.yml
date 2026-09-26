@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -59,6 +60,28 @@ jobs:
           count="$(gh run list --workflow "CI Quality" --branch main --commit "$EXPECTED_SHA" --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
           test "$count" -ge 1 || { echo "::error::CI Quality has no successful run for $EXPECTED_SHA"; exit 1; }
 
+      - name: Verify migration consistency release gate
+        if: ${{ github.event_name == 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTEGRATION_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          echo "Checking Integration workflow $INTEGRATION_RUN_ID for exact commit $EXPECTED_SHA"
+          run_sha="$(gh run view "$INTEGRATION_RUN_ID" --json headSha --jq '.headSha')"
+          test "$run_sha" = "$EXPECTED_SHA" || {
+            echo "::error::Integration run SHA does not match deployment SHA"
+            exit 1
+          }
+
+          gate="$(gh run view "$INTEGRATION_RUN_ID" --json jobs --jq '[.jobs[] | select(.name == "Migration consistency • release gate") | .conclusion] | .[0]')"
+          test "$gate" = "success" || {
+            echo "::error::Migration consistency release gate is not successful"
+            echo "::error::Gate conclusion: $gate"
+            exit 1
+          }
+          echo "Migration consistency release gate: PASS"
+
       - name: Verify main still points at tested commit
         if: ${{ github.event_name == 'workflow_run' }}
         env:
@@ -81,7 +104,13 @@ jobs:
           SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             --request POST             --url "${PANEL_URL%/}/api/client/servers/$SERVER_ID/power"             --header "Authorization: Bearer $API_KEY"             --header "Content-Type: application/json"             --data '{"signal":"restart"}'
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            --request POST \
+            --url "${PANEL_URL%/}/api/client/servers/$SERVER_ID/power" \
+            --header "Authorization: Bearer $API_KEY" \
+            --header "Content-Type: application/json" \
+            --data '{"signal":"restart"}'
 
       - name: Run production E2E smoke suite
         env:
@@ -100,7 +129,8 @@ jobs:
         run: |
           set -euo pipefail
           base="${HEALTH_URL%/}"
-          curl --fail --silent --show-error --connect-timeout 5 --max-time 10             -H 'Accept: application/json' "$base/health/live" >/tmp/health-live.json
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+            -H 'Accept: application/json' "$base/health/live" >/tmp/health-live.json
           python - <<'PY'
           import json
           with open("/tmp/health-live.json", encoding="utf-8") as f:
@@ -114,4 +144,5 @@ jobs:
           echo "Production deployment verified."
           echo "Commit: $EXPECTED_SHA"
           echo "Pterodactyl server: ${{ secrets.PTERODACTYL_SERVER_ID }}"
+          echo "Migration consistency: PASS"
           echo "Production E2E: PASS"
