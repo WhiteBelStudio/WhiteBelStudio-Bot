@@ -15,7 +15,11 @@ LOGGER = logging.getLogger("app.api.errors")
 
 
 def _request_id(request: Request) -> str:
-    return get_request_id() or request.headers.get("X-Request-ID") or ""
+    return (
+        get_request_id()
+        or request.headers.get("X-Request-ID")
+        or str(getattr(request.state, "request_id", "") or "")
+    )
 
 
 def _safe_detail(detail: Any, *, fallback: str) -> str:
