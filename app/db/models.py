@@ -84,7 +84,7 @@ class ReputationRating(Base):
 
 class CommunityChat(Base):
     __tablename__ = "community_chats"
-    __table_args__ = (UniqueConstraint("telegram_chat_id"),)
+    __table_args__ = (UniqueConstraint("telegram_chat_id", name="uq_community_chats_telegram_chat_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_chat_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
