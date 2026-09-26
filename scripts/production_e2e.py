@@ -30,32 +30,51 @@ def env(name: str) -> str:
     return value
 
 
-def request_json(base_url: str, path: str, *, headers: dict[str, str] | None = None) -> tuple[int, dict]:
+def request_json(
+    base_url: str,
+    path: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, dict, dict[str, str]]:
     url = urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
     request = Request(url, headers={"Accept": "application/json", **(headers or {})})
     try:
         with urlopen(request, timeout=float(os.getenv("E2E_REQUEST_TIMEOUT", "10"))) as response:
             body = response.read().decode("utf-8")
             status = response.status
+            response_headers = {key.lower(): value for key, value in response.headers.items()}
     except HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        fail(f"{path}: HTTP {exc.code}: {body[:300]}")
+        response_headers = {key.lower(): value for key, value in exc.headers.items()}
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            payload = {"raw": body[:300]}
+        return exc.code, payload, response_headers
     except (URLError, TimeoutError, OSError) as exc:
         fail(f"{path}: connection failed: {exc}")
+
     try:
         payload = json.loads(body)
     except json.JSONDecodeError as exc:
         fail(f"{path}: response is not JSON: {exc}")
     if not isinstance(payload, dict):
         fail(f"{path}: response must be a JSON object")
-    return status, payload
+    return status, payload, response_headers
 
 
-def assert_status(name: str, status: int, payload: dict, expected_status: int) -> None:
-    if status != expected_status:
-        fail(f"{name}: expected HTTP {expected_status}, got {status}")
+def assert_health_probe(
+    name: str,
+    status: int,
+    payload: dict,
+    response_headers: dict[str, str],
+) -> None:
+    if status != 200:
+        fail(f"{name}: expected HTTP 200, got {status}: {payload}")
     if payload.get("status") != "ok":
         fail(f"{name}: expected status=ok")
+    if not response_headers.get("x-request-id", "").strip():
+        fail(f"{name}: missing X-Request-ID response header")
     print(f"::notice::{name}: PASS")
 
 
@@ -69,10 +88,19 @@ def build_init_data(bot_token: str, telegram_id: int) -> str:
             separators=(",", ":"),
         ),
     }
-    check_string = "
-".join(f"{key}={value}" for key, value in sorted(values.items()))
-    secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-    values["hash"] = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
+    check_string = "\n".join(
+        f"{key}={value}" for key, value in sorted(values.items())
+    )
+    secret = hmac.new(
+        b"WebAppData",
+        bot_token.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    values["hash"] = hmac.new(
+        secret,
+        check_string.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
     return urlencode(values)
 
 
@@ -83,7 +111,10 @@ def main() -> None:
         fail("PRODUCTION_HEALTHCHECK_URL must use HTTPS")
 
     expected_build = os.getenv("EXPECTED_BUILD_SHA", "").strip().lower()
-    if expected_build and (len(expected_build) != 40 or any(char not in "0123456789abcdef" for char in expected_build)):
+    if expected_build and (
+        len(expected_build) != 40
+        or any(char not in "0123456789abcdef" for char in expected_build)
+    ):
         fail("EXPECTED_BUILD_SHA must be a 40-character Git SHA")
 
     probes = (
@@ -95,15 +126,16 @@ def main() -> None:
     )
 
     for probe in probes:
-        status, payload = request_json(base, probe.path)
-        assert_status(probe.name, status, payload, 200)
+        status, payload, response_headers = request_json(base, probe.path)
+        assert_health_probe(probe.name, status, payload, response_headers)
         missing = [key for key in probe.expected if key not in payload]
         if missing:
             fail(f"{probe.name}: missing fields: {', '.join(missing)}")
-        if probe.name == "readiness" and payload.get("database") != "ok":
-            fail("readiness: database is not ready")
-        if probe.name == "readiness" and not str(payload.get("revision", "")).strip():
-            fail("readiness: migration revision is empty")
+        if probe.name == "readiness":
+            if payload.get("database") != "ok":
+                fail("readiness: database is not ready")
+            if not str(payload.get("revision", "")).strip():
+                fail("readiness: migration revision is empty")
         if probe.name == "build":
             actual_build = str(payload.get("build_sha", "")).strip().lower()
             if len(actual_build) != 40:
@@ -124,15 +156,28 @@ def main() -> None:
         fail("PRODUCTION_E2E_TELEGRAM_USER_ID must be positive")
 
     init_data = build_init_data(bot_token, user_id)
-    status, payload = request_json(
+    status, payload, response_headers = request_json(
         base,
         "/api/v1/me",
         headers={"X-Telegram-Init-Data": init_data},
     )
-    assert_status("mini-app-auth", status, payload, 200)
+    if status != 200:
+        fail(f"mini-app-auth: expected HTTP 200, got {status}: {payload}")
     if int(payload.get("telegram_id", -1)) != user_id:
         fail("mini-app-auth: authenticated Telegram ID does not match probe user")
+    if not response_headers.get("x-request-id", "").strip():
+        fail("mini-app-auth: missing X-Request-ID response header")
     print("::notice::mini-app-auth: shared Bot/API identity PASS")
+
+    status, payload, response_headers = request_json(base, "/api/v1/me")
+    if status != 401:
+        fail(f"unauthenticated-api: expected HTTP 401, got {status}: {payload}")
+    for field in ("error", "detail", "request_id", "status_code"):
+        if field not in payload:
+            fail(f"unauthenticated-api: missing error field {field}")
+    if not response_headers.get("x-request-id", "").strip():
+        fail("unauthenticated-api: missing X-Request-ID response header")
+    print("::notice::unauthenticated-api: error contract PASS")
 
     print("::notice::Production E2E smoke suite: PASS")
 
