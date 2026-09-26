@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["CI Quality"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -16,16 +16,21 @@ concurrency:
 
 jobs:
   deploy:
-    name: Production • Pterodactyl restart + full E2E
+    name: Production • commit-pinned deploy + full E2E
     if: >-
       ${{ github.event_name == 'workflow_dispatch' ||
           (github.event.workflow_run.conclusion == 'success' &&
            github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
     steps:
-      - name: Checkout deployment scripts
+      - name: Checkout exact deployment commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
 
       - name: Validate deployment configuration
         env:
@@ -44,6 +49,22 @@ jobs:
           test -n "$E2E_BOT_TOKEN" || { echo "::error::PRODUCTION_E2E_BOT_TOKEN is not configured"; exit 1; }
           test -n "$E2E_USER_ID" || { echo "::error::PRODUCTION_E2E_TELEGRAM_USER_ID is not configured"; exit 1; }
           [[ "$HEALTH_URL" == https://* ]] || { echo "::error::PRODUCTION_HEALTHCHECK_URL must use HTTPS"; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Expected deployment SHA is invalid"; exit 1; }
+
+      - name: Verify main still points at tested commit
+        if: ${{ github.event_name == 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          actual="$(gh api repos/${{ github.repository }}/git/ref/heads/main --jq '.object.sha')"
+          if [[ "$actual" != "$EXPECTED_SHA" ]]; then
+            echo "::error::main advanced after CI completed."
+            echo "::error::Expected tested SHA: $EXPECTED_SHA"
+            echo "::error::Current main SHA:    $actual"
+            echo "::error::Wait for CI on the newer commit before deploying."
+            exit 1
+          fi
 
       - name: Restart production server
         env:
@@ -52,44 +73,37 @@ jobs:
           SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error \
-            --connect-timeout 10 --max-time 30 \
-            --request POST \
-            --url "${PANEL_URL%/}/api/client/servers/$SERVER_ID/power" \
-            --header "Authorization: Bearer $API_KEY" \
-            --header "Content-Type: application/json" \
-            --data '{"signal":"restart"}'
+          curl --fail-with-body --silent --show-error             --connect-timeout 10 --max-time 30             --request POST             --url "${PANEL_URL%/}/api/client/servers/$SERVER_ID/power"             --header "Authorization: Bearer $API_KEY"             --header "Content-Type: application/json"             --data '{"signal":"restart"}'
 
       - name: Run production E2E smoke suite
         env:
           PRODUCTION_HEALTHCHECK_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
           PRODUCTION_E2E_BOT_TOKEN: ${{ secrets.PRODUCTION_E2E_BOT_TOKEN }}
           PRODUCTION_E2E_TELEGRAM_USER_ID: ${{ secrets.PRODUCTION_E2E_TELEGRAM_USER_ID }}
+          EXPECTED_BUILD_SHA: ${{ env.EXPECTED_SHA }}
           E2E_REQUEST_TIMEOUT: "10"
         run: |
           set -euo pipefail
           python scripts/production_e2e.py
 
-      - name: Verify deployed API contract
+      - name: Verify final liveness contract
         env:
           HEALTH_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
         run: |
           set -euo pipefail
           base="${HEALTH_URL%/}"
-          curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
-            -H 'Accept: application/json' "$base/health/live" >/tmp/health-live.json
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 10             -H 'Accept: application/json' "$base/health/live" >/tmp/health-live.json
           python - <<'PY'
           import json
-          with open('/tmp/health-live.json', encoding='utf-8') as f:
+          with open("/tmp/health-live.json", encoding="utf-8") as f:
               body = json.load(f)
-          assert body == {'status': 'ok'}, body
-          print('liveness contract: PASS')
+          assert body == {"status": "ok"}, body
+          print("final liveness contract: PASS")
           PY
 
       - name: Deployment summary
-        env:
-          SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
         run: |
-          echo "Production restart completed."
+          echo "Production deployment verified."
+          echo "Commit: $EXPECTED_SHA"
+          echo "Pterodactyl server: ${{ secrets.PTERODACTYL_SERVER_ID }}"
           echo "Production E2E: PASS"
-          echo "Pterodactyl server: $SERVER_ID"
