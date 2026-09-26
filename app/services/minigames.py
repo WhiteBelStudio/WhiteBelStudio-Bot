@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 WORDS = (
     "алгоритм", "сервер", "команда", "модератор", "сообщество",
@@ -21,7 +21,7 @@ class MiniGame:
 
     @property
     def expired(self) -> bool:
-        return datetime.utcnow() - self.started_at > timedelta(minutes=5)
+        return datetime.now(timezone.utc) - self.started_at > timedelta(minutes=5)
 
     @property
     def difficulty(self) -> str:
