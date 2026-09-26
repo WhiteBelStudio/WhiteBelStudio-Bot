@@ -11,8 +11,8 @@ def test_reputation_levels() -> None:
 
 
 def test_reputation_next_thresholds() -> None:
-    assert reputation_level(0)[1] == 10
-    assert reputation_level(10)[1] == 25
-    assert reputation_level(25)[1] == 50
-    assert reputation_level(50)[1] == 100
-    assert reputation_level(100)[1] == 100
+    assert reputation_level(0)[2] == 10
+    assert reputation_level(10)[2] == 25
+    assert reputation_level(25)[2] == 50
+    assert reputation_level(50)[2] == 100
+    assert reputation_level(100)[2] == 100
