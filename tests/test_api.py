@@ -305,7 +305,7 @@ async def test_http_errors_use_unified_shape() -> None:
 
 @pytest.mark.asyncio
 async def test_validation_errors_use_unified_shape() -> None:
-    from app.api.dependencies import get_current_telegram_user
+    from app.api.dependencies import get_current_telegram_user, get_database_session
 
     app.dependency_overrides[get_current_telegram_user] = lambda: User(
         id=7,
