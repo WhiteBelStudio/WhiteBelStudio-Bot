@@ -21,7 +21,7 @@ def test_all_mini_games_start_and_have_valid_answers():
             assert len(set(game.answer)) == 4
 
         if kind == "algorithm":
-            assert game.answer.split() == sorted(game.answer.split(), key=int)
+            assert sorted(game.answer.split(), key=int) == ["1", "2", "3", "4"]
 
         if kind == "chain":
             assert game.meta["required_first"].isalpha()
