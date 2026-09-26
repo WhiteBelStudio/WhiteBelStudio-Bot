@@ -44,6 +44,9 @@ jobs:
           python -m pip install pip-audit
           python -m pip check
 
+      - name: Ruff format pass
+        run: python -m ruff format .
+
       - name: Ruff auto-fix pass
         run: python -m ruff check . --fix --unsafe-fixes
 
