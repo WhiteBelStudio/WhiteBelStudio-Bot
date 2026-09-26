@@ -4,6 +4,7 @@ import asyncio
 
 from app.bot import economy, games
 import main
+from app.bot import core
 
 
 class FakeMessage:
@@ -35,13 +36,13 @@ def run(coro):
 
 def test_help_callbacks_round_trip():
     categories = FakeCallback("help_categories")
-    run(main.help_categories_callback(categories))
+    run(core.help_categories_callback(categories))
     assert categories.answered == [(None, {})]
     assert categories.message.edits
     assert "Помощь WhiteBelStudio" in categories.message.edits[-1][0]
 
     category = FakeCallback("help_category:game")
-    run(main.help_category_callback(category))
+    run(core.help_category_callback(category))
     assert category.answered == [(None, {})]
     assert "Игровые команды" in category.message.edits[-1][0]
 
