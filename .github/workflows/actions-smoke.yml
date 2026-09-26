@@ -25,4 +25,5 @@ jobs:
           set -euo pipefail
           echo "GitHub Actions runner is working"
           python --version
-          test -f .github/workflows/ci.yml
+          test -f .github/workflows/quality.yml
+          test -f .github/workflows/deploy.yml
