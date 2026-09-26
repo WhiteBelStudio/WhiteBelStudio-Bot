@@ -47,6 +47,7 @@ class RequestIdMiddleware:
             return
 
         request_id = _incoming_request_id(scope) or str(uuid.uuid4())
+        scope.setdefault("state", {})["request_id"] = request_id
         token = _request_id.set(request_id)
         logger = logging.getLogger("app.api")
 
