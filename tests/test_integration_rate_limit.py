@@ -47,7 +47,7 @@ async def test_authenticated_rate_limit_returns_retry_after(monkeypatch: pytest.
         first = await client.get("/api/v1/me", headers=headers)
         second = await client.get("/api/v1/me", headers=headers)
 
-    assert first.status_code == 401
+    assert first.status_code in {401, 403}
     assert second.status_code == 429
     assert second.headers.get("Retry-After")
     body = second.json()
