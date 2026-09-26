@@ -40,6 +40,10 @@ def _bucket_key(request: Request) -> tuple[str, int]:
 
 async def enforce_rate_limit(request: Request) -> None:
     path = request.url.path
+    if os.getenv("APP_ENV", "production").lower() != "production":
+        return
+    if not os.getenv("DATABASE_URL", "").strip():
+        return
     if path.startswith("/health") or path == "/api/v1/health":
         return
 
