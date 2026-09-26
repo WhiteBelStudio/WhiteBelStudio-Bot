@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -84,9 +84,10 @@ class ReputationRating(Base):
 
 class CommunityChat(Base):
     __tablename__ = "community_chats"
+    __table_args__ = (UniqueConstraint("telegram_chat_id", name="uq_community_chats_telegram_chat_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True, nullable=False)
+    telegram_chat_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     chat_type: Mapped[str] = mapped_column(String(32), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -260,3 +261,15 @@ class UserAchievement(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     achievement_id: Mapped[int] = mapped_column(ForeignKey("achievements.id", ondelete="CASCADE"), nullable=False, index=True)
     unlocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class RateLimitBucket(Base):
+    __tablename__ = "rate_limit_buckets"
+    __table_args__ = (
+        CheckConstraint("request_count >= 0", name="ck_rate_limit_request_count"),
+        Index("ix_rate_limit_buckets_window_start", "window_start"),
+    )
+
+    bucket_key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
