@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -283,6 +283,13 @@ class ArchiveRecord(Base):
     __table_args__ = (
         Index("ix_archive_records_entity", "entity_type", "entity_id"),
         Index("ix_archive_records_archived_at", "archived_at"),
+        Index(
+            "uq_archive_records_active_entity",
+            "entity_type",
+            "entity_id",
+            unique=True,
+            postgresql_where=text("restored_at IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
