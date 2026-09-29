@@ -12,6 +12,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import ErrorEvent
 
 from app.bot.achievements import router as achievements_router
+from app.bot.admin import router as admin_router
 from app.bot.core import router as core_router
 from app.bot.economy import router as economy_router
 from app.bot.games import router as games_router
@@ -55,6 +56,7 @@ def build_dispatcher() -> Dispatcher:
                 )
         return True
 
+    dp.include_router(admin_router)
     dp.include_router(core_router)
     dp.include_router(economy_router)
     dp.include_router(achievements_router)
