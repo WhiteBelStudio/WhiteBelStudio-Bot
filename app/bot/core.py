@@ -261,6 +261,7 @@ async def setup_bot_commands(bot) -> None:
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="Открыть меню"),
+            BotCommand(command="admin", description="Административная панель"),
             BotCommand(command="help", description="Помощь"),
             BotCommand(command="game", description="Игровой профиль"),
             BotCommand(command="gametop", description="Топ игроков"),
